@@ -4,6 +4,33 @@
   "description": "Agnostic, type-safe video SDK. One API across rehelios, Mux, Bunny Stream, and Cloudflare Stream.",
   "type": "module",
   "license": "MIT",
+  "author": "Rehelios",
+  "homepage": "https://github.com/Rehelios/videos-sdk#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rehelios/videos-sdk.git",
+    "directory": "packages/videos-sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/Rehelios/videos-sdk/issues"
+  },
+  "keywords": [
+    "video",
+    "sdk",
+    "mux",
+    "bunny",
+    "bunny-stream",
+    "cloudflare-stream",
+    "hls",
+    "dash",
+    "streaming",
+    "upload",
+    "typescript",
+    "type-safe"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false,
   "files": ["dist"],
   "exports": {

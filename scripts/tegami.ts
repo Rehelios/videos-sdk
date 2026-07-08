@@ -8,6 +8,10 @@ await runCli(
   tegami({
     changelogDir: ".tegami/changes",
     generator: simpleGenerator(),
-    plugins: [npm(), github({ repo: "rehelios/videos-sdk" })],
+    plugins: [
+      // Enables `tegami npm pretrust` — see CONTRIBUTING.md.
+      npm({ trustedPublish: { provider: "github", workflow: "release.yml" } }),
+      github({ repo: "rehelios/videos-sdk" }),
+    ],
   }),
 );

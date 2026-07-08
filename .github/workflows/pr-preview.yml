@@ -1,0 +1,40 @@
+name: PR Release Preview
+
+# Builds a release preview for each PR: which packages would be released, at what
+# bump, and the changelog notes. This job has no write access (fork-safe); the
+# companion "PR Release Preview Comment" workflow posts the result via workflow_run.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need base..head to detect changelog files
+          persist-credentials: false # read-only job, never pushes
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: Build release preview
+        run: bun scripts/tegami.ts pr preview --artifact preview.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-preview
+          path: preview.md
+          if-no-files-found: error

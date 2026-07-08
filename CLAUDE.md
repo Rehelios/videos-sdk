@@ -76,13 +76,9 @@ When touching the SDK, match these:
 | Adapter | Implemented | Verified |
 | --- | --- | --- |
 | **rehelios** | full core + multipart upload + import + signed playback | ✅ unit tests vs the real contract (see below) |
-| **Mux** | core + direct upload + ingest + RS256 (WebCrypto) signed playback | ✅ live (`scripts/verify-mux.ts`) |
-| **Bunny** | core + PUT upload + fetch + SHA-256 token signed playback | ✅ live (`scripts/verify-bunny.ts`) |
+| **Mux** | core + direct upload + ingest + RS256 (WebCrypto) signed playback | ✅ live against a real account |
+| **Bunny** | core + PUT upload + fetch + SHA-256 token signed playback | ✅ live against a real account |
 | **Cloudflare** | core + direct upload + copy + `/token` signed playback | ✅ against the official docs |
-
-`scripts/verify-*.ts` drive an adapter against a live account via env-var creds
-(`list → create/ingest → get → playback → delete`, with cleanup). Read-only-ish; they
-create and delete one test asset.
 
 ### Provider gotchas
 

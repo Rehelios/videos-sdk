@@ -1,0 +1,63 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+tone_instructions: >-
+  Be concise and pragmatic. Prioritize correctness, type-safety, and public-API
+  stability over style nits (Biome already handles formatting).
+
+reviews:
+  # "chill" keeps noise down; switch to "assertive" for deeper, pickier reviews.
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  changed_files_summary: true
+  sequence_diagrams: false
+
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+
+  # Don't waste review budget on generated / vendored files.
+  path_filters:
+    - "!**/dist/**"
+    - "!**/node_modules/**"
+    - "!**/.source/**"
+    - "!**/.next/**"
+    - "!**/.astro/**"
+    - "!**/.wrangler/**"
+    - "!bun.lock"
+
+  path_instructions:
+    - path: "packages/videos-sdk/**/*.ts"
+      instructions: >-
+        This is the published, provider-agnostic video SDK. Enforce type-safety as
+        the primary contract: unsupported operations must be COMPILE errors via
+        capability literal types, never silent runtime behavior. Flag any `any`,
+        unhandled `VideoError` codes, or adapter behavior that diverges from the
+        capabilities matrix in README.md. This is a breaking-change-sensitive public
+        API — call out anything that changes exported types, function signatures, or
+        the `exports` map in package.json.
+    - path: "packages/videos-sdk/**/*.test.ts"
+      instructions: >-
+        Check that adapter tests assert both the happy path and typed error codes.
+    - path: ".github/workflows/**"
+      instructions: >-
+        Verify least-privilege `permissions`, that `id-token: write` is only present
+        where OIDC publishing needs it, and that no secret leaks into logs. The
+        release flow is Tegami-driven — flag changes that could publish
+        unintentionally.
+    - path: ".tegami/changes/**"
+      instructions: >-
+        These are changelog entries. Do not review them for code; only check the
+        frontmatter is valid and the note is user-facing.
+
+  tools:
+    biome:
+      enabled: true
+
+chat:
+  auto_reply: true
