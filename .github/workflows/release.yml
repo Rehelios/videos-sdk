@@ -1,29 +1,33 @@
 name: Release
 
+# Publishes packages/videos-sdk to npm whenever a GitHub Release is published
+# (create one with a v-tag, e.g. v0.1.0). Uses the NPM_TOKEN secret (an npm
+# Automation/Granular token that bypasses 2FA) and adds build provenance.
 on:
-  push:
-    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch: {}
 
-concurrency: release
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
-  release:
+  publish:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
-      pull-requests: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
       - run: bun install --frozen-lockfile
-      - run: bun run build
-      - run: bun scripts/tegami.ts ci
+      - run: bun run --filter videos-sdk build
+      - run: bun run --filter videos-sdk test
+      - run: npm publish --provenance --access public
+        working-directory: packages/videos-sdk
         env:
-          NPM_CONFIG_PROVENANCE: 'true'
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
