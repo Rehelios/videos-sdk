@@ -34,7 +34,7 @@ const CAPABILITIES = [
   { name: 'HLS playback', rehelios: true, mux: true, bunny: true, cloudflare: true },
   { name: 'DASH playback', rehelios: true, mux: false, bunny: false, cloudflare: true },
   { name: 'Signed playback', rehelios: true, mux: true, bunny: true, cloudflare: true },
-  { name: 'Thumbnail at time', rehelios: true, mux: true, bunny: false, cloudflare: true },
+  { name: 'Thumbnail at time', rehelios: false, mux: true, bunny: false, cloudflare: true },
   { name: 'Captions', rehelios: true, mux: true, bunny: true, cloudflare: true },
   { name: 'Webhooks', rehelios: true, mux: true, bunny: true, cloudflare: true },
 ] as const;

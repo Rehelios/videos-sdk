@@ -10,8 +10,8 @@ function mockFetch(handler: (url: string, init?: RequestInit) => Response): void
     Promise.resolve(handler(String(input), init))) as typeof fetch;
 }
 
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
+function ok(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify({ success: true, data }), {
     status,
     headers: { "content-type": "application/json" },
   });
@@ -26,7 +26,7 @@ describe("rehelios adapter", () => {
     mockFetch((url, init) => {
       expect(url).toBe("https://api.rehelios.com/v1/videos");
       expect(init?.method).toBe("POST");
-      return json({ id: "vid_1", status: "processing", duration_seconds: 12 });
+      return ok({ id: "vid_1", status: "queued", durationSecs: 12 });
     });
     const videos = createVideos({ adapter: rehelios({ apiKey: "k" }) });
     const asset = await videos.create({ title: "Intro" });
@@ -35,18 +35,46 @@ describe("rehelios adapter", () => {
     expect(asset.duration).toBe(12);
   });
 
-  test("playback builds HLS + DASH URLs with no network call", async () => {
-    mockFetch(() => {
-      throw new Error("playback must not hit the network");
+  test("create sends collectionId + visibility from config", async () => {
+    let body: { collectionId?: string; visibility?: string } = {};
+    mockFetch((_url, init) => {
+      body = JSON.parse(String(init?.body)) as typeof body;
+      return ok({ id: "v", status: "created" });
+    });
+    const videos = createVideos({
+      adapter: rehelios({ apiKey: "k", collectionId: "c460", visibility: "public" }),
+    });
+    await videos.create({ title: "x" });
+    expect(body.collectionId).toBe("c460");
+    expect(body.visibility).toBe("public");
+  });
+
+  test("playback returns HLS, poster, and derived DASH", async () => {
+    mockFetch((url) => {
+      expect(url).toBe("https://api.rehelios.com/v1/videos/vid_1");
+      return ok({
+        id: "vid_1",
+        status: "ready",
+        playbackUrl: "https://media.rehelios.com/org/vid_1/hls/master.m3u8",
+        posterUrl: "https://media.rehelios.com/org/vid_1/poster.jpg",
+        dashPath: "dash/manifest.mpd",
+      });
     });
     const videos = createVideos({ adapter: rehelios({ apiKey: "k" }) });
     const playback = await videos.playback("vid_1");
-    expect(playback.hls).toBe("https://stream.rehelios.com/v/vid_1/playlist.m3u8");
-    expect(playback.dash).toBe("https://stream.rehelios.com/v/vid_1/manifest.mpd");
+    expect(playback.hls).toBe("https://media.rehelios.com/org/vid_1/hls/master.m3u8");
+    expect(playback.poster).toBe("https://media.rehelios.com/org/vid_1/poster.jpg");
+    expect(playback.dash).toBe("https://media.rehelios.com/org/vid_1/dash/manifest.mpd");
   });
 
   test("maps a 404 response to a typed VideoError", async () => {
-    mockFetch(() => json({ message: "gone" }, 404));
+    mockFetch(
+      () =>
+        new Response(JSON.stringify({ success: false, error: { code: "NOT_FOUND" } }), {
+          status: 404,
+          headers: { "content-type": "application/json" },
+        }),
+    );
     const videos = createVideos({ adapter: rehelios({ apiKey: "k" }) });
     const error = await videos.get("missing").catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(VideoError);
@@ -55,19 +83,23 @@ describe("rehelios adapter", () => {
   });
 
   test("an unknown provider status falls back to processing", async () => {
-    mockFetch(() => json({ id: "v", status: "brand_new_state" }));
+    mockFetch(() => ok({ id: "v", status: "brand_new_state" }));
     const videos = createVideos({ adapter: rehelios({ apiKey: "k" }) });
     expect((await videos.get("v")).status).toBe("processing");
   });
 
-  test("signedPlayback returns a tokenized manifest URL", async () => {
+  test("signedPlayback tokenizes the playback URL", async () => {
     mockFetch((url) => {
-      expect(url).toBe("https://api.rehelios.com/v1/videos/v/playback-token");
-      return json({ token: "abc123" });
+      if (url.endsWith("/playback-token")) return ok({ token: "abc123" });
+      return ok({
+        id: "v",
+        status: "ready",
+        playbackUrl: "https://media.rehelios.com/org/v/hls/master.m3u8",
+      });
     });
     const videos = createVideos({ adapter: rehelios({ apiKey: "k" }) });
     const signed = await videos.signedPlayback("v", { expiresInSeconds: 60 });
-    expect(signed).toBe("https://stream.rehelios.com/v/v/playlist.m3u8?token=abc123");
+    expect(signed).toBe("https://media.rehelios.com/org/v/hls/master.m3u8?token=abc123");
   });
 
   test("requires an apiKey", () => {

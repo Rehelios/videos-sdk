@@ -1,6 +1,6 @@
 import type { VideoAdapter } from "./adapter";
 import { VideoError } from "./errors";
-import { createHttpClient, putBinary } from "./internal/http";
+import { createHttpClient } from "./internal/http";
 import { rejects } from "./internal/pending";
 import type {
   Asset,
@@ -24,56 +24,70 @@ import type {
 export interface ReheliosConfig {
   readonly apiKey: string;
   readonly apiBaseUrl?: string;
-  readonly playbackHost?: string;
+  readonly appUrl?: string;
+  readonly collectionId?: string;
+  readonly visibility?: "public" | "private";
 }
 
 export type ReheliosCapabilities = {
   readonly dash: true;
   readonly ingestFromUrl: true;
   readonly signedPlayback: true;
-  readonly thumbnailAtTime: true;
+  readonly thumbnailAtTime: false;
   readonly captions: true;
   readonly webhooks: true;
 };
 
 const PROVIDER = "rehelios";
 const DEFAULT_API_BASE_URL = "https://api.rehelios.com";
-const DEFAULT_PLAYBACK_HOST = "https://stream.rehelios.com";
+const DEFAULT_APP_URL = "https://app.rehelios.com";
+
+interface Envelope<T> {
+  readonly success: boolean;
+  readonly data: T;
+}
 
 interface ReheliosVideo {
   readonly id: string;
   readonly status: string;
-  readonly duration_seconds?: number;
-  readonly width?: number;
-  readonly height?: number;
-  readonly created_at?: string;
-  readonly passthrough?: string;
+  readonly title?: string;
+  readonly collectionId?: string | null;
+  readonly durationSecs?: number | null;
+  readonly width?: number | null;
+  readonly height?: number | null;
+  readonly createdAt?: string;
+  readonly playbackUrl?: string | null;
+  readonly posterUrl?: string | null;
+  readonly dashPath?: string | null;
 }
 
-interface ReheliosVideoList {
-  readonly data: readonly ReheliosVideo[];
+interface ReheliosUploadInit {
+  readonly uploadId: string;
+  readonly key: string;
+  readonly partSize: number;
+  readonly urls: readonly string[];
 }
 
-interface ReheliosUploadTicket {
-  readonly id: string;
-  readonly upload_url: string;
-  readonly protocol?: string;
+interface ReheliosPage {
+  readonly items: readonly ReheliosVideo[];
 }
-
-interface ReheliosPlaybackToken {
-  readonly token: string;
-}
-
-const KNOWN_STATUSES: ReadonlySet<string> = new Set([
-  "waiting_upload",
-  "uploading",
-  "processing",
-  "ready",
-  "errored",
-]);
 
 function toStatus(value: string): AssetStatus {
-  return KNOWN_STATUSES.has(value) ? (value as AssetStatus) : "processing";
+  switch (value) {
+    case "created":
+      return "waiting_upload";
+    case "uploading":
+      return "uploading";
+    case "queued":
+    case "transcoding":
+      return "processing";
+    case "ready":
+      return "ready";
+    case "failed":
+      return "errored";
+    default:
+      return "processing";
+  }
 }
 
 function toAsset(video: ReheliosVideo): Asset {
@@ -81,12 +95,31 @@ function toAsset(video: ReheliosVideo): Asset {
     id: video.id,
     status: toStatus(video.status),
     raw: video,
-    ...(video.duration_seconds !== undefined ? { duration: video.duration_seconds } : {}),
-    ...(video.width !== undefined ? { width: video.width } : {}),
-    ...(video.height !== undefined ? { height: video.height } : {}),
-    ...(video.created_at !== undefined ? { createdAt: new Date(video.created_at) } : {}),
-    ...(video.passthrough !== undefined ? { passthrough: video.passthrough } : {}),
+    ...(video.durationSecs != null ? { duration: video.durationSecs } : {}),
+    ...(video.width != null ? { width: video.width } : {}),
+    ...(video.height != null ? { height: video.height } : {}),
+    ...(video.createdAt !== undefined ? { createdAt: new Date(video.createdAt) } : {}),
+    ...(video.title !== undefined ? { passthrough: video.title } : {}),
   };
+}
+
+function toPlayback(video: ReheliosVideo): Playback {
+  const hls = video.playbackUrl ?? "";
+  const poster = video.posterUrl ?? "";
+  const base = hls.replace(/\/hls\/master\.m3u8$/, "");
+  return {
+    hls,
+    poster,
+    ...(video.dashPath ? { dash: `${base}/${video.dashPath}` } : {}),
+  };
+}
+
+async function toBlob(body: VideoBody): Promise<Blob> {
+  if (body instanceof Blob) return body;
+  if (typeof body === "string") return new Blob([body]);
+  if (body instanceof Uint8Array || body instanceof ArrayBuffer)
+    return new Blob([body as BlobPart]);
+  return new Response(body).blob();
 }
 
 export function rehelios(config: ReheliosConfig): VideoAdapter<ReheliosCapabilities> {
@@ -96,21 +129,30 @@ export function rehelios(config: ReheliosConfig): VideoAdapter<ReheliosCapabilit
     });
   }
 
-  const host = config.playbackHost ?? DEFAULT_PLAYBACK_HOST;
+  const app = (config.appUrl ?? DEFAULT_APP_URL).replace(/\/$/, "");
   const http = createHttpClient({
     baseUrl: config.apiBaseUrl ?? DEFAULT_API_BASE_URL,
     provider: PROVIDER,
-    headers: { authorization: `Bearer ${config.apiKey}` },
+    headers: { "x-api-key": config.apiKey },
   });
 
   const capabilities: ReheliosCapabilities = {
     dash: true,
     ingestFromUrl: true,
     signedPlayback: true,
-    thumbnailAtTime: true,
+    thumbnailAtTime: false,
     captions: true,
     webhooks: true,
   };
+
+  const createBody = (title: string): Record<string, unknown> => ({
+    title,
+    ...(config.collectionId !== undefined ? { collectionId: config.collectionId } : {}),
+    ...(config.visibility !== undefined ? { visibility: config.visibility } : {}),
+  });
+
+  const getVideo = async (id: string): Promise<ReheliosVideo> =>
+    (await http.get<Envelope<ReheliosVideo>>(`/v1/videos/${id}`)).data;
 
   const captions: CaptionOps = {
     list: rejects<readonly Caption[]>(PROVIDER, "captions.list"),
@@ -128,66 +170,104 @@ export function rehelios(config: ReheliosConfig): VideoAdapter<ReheliosCapabilit
     raw: config,
 
     create: async (input?: CreateInput): Promise<Asset> => {
-      const video = await http.post<ReheliosVideo>("/v1/videos", input ?? {});
-      return toAsset(video);
+      const title = input?.title ?? "Untitled";
+      const video = await http.post<Envelope<ReheliosVideo>>("/v1/videos", createBody(title));
+      return toAsset(video.data);
     },
 
     upload: async (key: string, body: VideoBody, options?: UploadOptions): Promise<Asset> => {
-      const ticket = await http.post<ReheliosUploadTicket>("/v1/uploads", { key });
-      await putBinary(ticket.upload_url, body, PROVIDER, options);
-      return toAsset(await http.get<ReheliosVideo>(`/v1/videos/${ticket.id}`));
+      const created = (await http.post<Envelope<ReheliosVideo>>("/v1/videos", createBody(key)))
+        .data;
+      const blob = await toBlob(body);
+      const init = (
+        await http.post<Envelope<ReheliosUploadInit>>(`/v1/videos/${created.id}/upload-init`, {
+          filename: key,
+          contentType:
+            options?.contentType ?? (blob.type === "" ? "application/octet-stream" : blob.type),
+          size: blob.size,
+        })
+      ).data;
+
+      const parts: { partNumber: number; etag: string }[] = [];
+      for (let i = 0; i < init.urls.length; i++) {
+        const url = init.urls[i];
+        if (url === undefined) continue;
+        const start = i * init.partSize;
+        const end = Math.min(start + init.partSize, blob.size);
+        const response = await fetch(url, { method: "PUT", body: blob.slice(start, end) });
+        if (!response.ok) {
+          throw new VideoError("upload_failed", `Part ${i + 1} failed (${response.status}).`, {
+            provider: PROVIDER,
+            status: response.status,
+          });
+        }
+        parts.push({ partNumber: i + 1, etag: response.headers.get("etag") ?? "" });
+        options?.onProgress?.({ bytesUploaded: end, bytesTotal: blob.size });
+      }
+
+      await http.post(`/v1/videos/${created.id}/upload-complete`, {
+        uploadId: init.uploadId,
+        parts,
+      });
+      return toAsset(await getVideo(created.id));
     },
 
     signedUploadUrl: async (options?: SignedUploadUrlOptions): Promise<UploadTicket> => {
-      const ticket = await http.post<ReheliosUploadTicket>("/v1/uploads", options ?? {});
-      return {
-        id: ticket.id,
-        url: ticket.upload_url,
-        method: ticket.protocol === "tus" ? "TUS" : "PUT",
-      };
+      const title = options?.key ?? "upload";
+      const created = (await http.post<Envelope<ReheliosVideo>>("/v1/videos", createBody(title)))
+        .data;
+      const init = (
+        await http.post<Envelope<ReheliosUploadInit>>(`/v1/videos/${created.id}/upload-init`, {
+          filename: title,
+          contentType: "application/octet-stream",
+          ...(options?.maxSizeBytes !== undefined ? { size: options.maxSizeBytes } : {}),
+        })
+      ).data;
+      const first = init.urls[0];
+      return { id: created.id, url: first ?? "", method: "PUT" };
     },
 
-    get: async (id: string): Promise<Asset> =>
-      toAsset(await http.get<ReheliosVideo>(`/v1/videos/${id}`)),
+    get: async (id: string): Promise<Asset> => toAsset(await getVideo(id)),
 
     list: async (options?: ListOptions): Promise<readonly Asset[]> => {
       const query = new URLSearchParams();
-      if (options?.limit !== undefined) query.set("limit", String(options.limit));
-      if (options?.cursor !== undefined) query.set("cursor", options.cursor);
+      if (options?.limit !== undefined) query.set("pageSize", String(options.limit));
+      if (options?.cursor !== undefined) query.set("page", options.cursor);
+      if (config.collectionId !== undefined) query.set("collectionId", config.collectionId);
       const suffix = query.size > 0 ? `?${query.toString()}` : "";
-      const page = await http.get<ReheliosVideoList>(`/v1/videos${suffix}`);
-      return page.data.map(toAsset);
+      const page = await http.get<Envelope<ReheliosPage>>(`/v1/videos${suffix}`);
+      return page.data.items.map(toAsset);
     },
 
     delete: async (id: string): Promise<void> => {
       await http.del(`/v1/videos/${id}`);
     },
 
-    playback: (id: string): Promise<Playback> =>
-      Promise.resolve({
-        hls: `${host}/v/${id}/playlist.m3u8`,
-        dash: `${host}/v/${id}/manifest.mpd`,
-        poster: `${host}/v/${id}/thumbnail.jpg`,
-      }),
+    playback: async (id: string): Promise<Playback> => toPlayback(await getVideo(id)),
 
-    thumbnail: (id: string, options?: ThumbnailOptions): string => {
-      const base = `${host}/v/${id}/thumbnail.jpg`;
-      return options?.time === undefined ? base : `${base}?time=${options.time}`;
-    },
+    thumbnail: (id: string, _options?: ThumbnailOptions): string => `${app}/embed/${id}/poster.jpg`,
 
     signedPlayback: async (id: string, options: SignedPlaybackOptions): Promise<string> => {
-      const { token } = await http.post<ReheliosPlaybackToken>(`/v1/videos/${id}/playback-token`, {
-        expires_in: options.expiresInSeconds,
-      });
-      return `${host}/v/${id}/playlist.m3u8?token=${token}`;
+      const [{ token }, video] = await Promise.all([
+        http
+          .post<Envelope<{ token: string }>>(`/v1/videos/${id}/playback-token`, {
+            expiresIn: options.expiresInSeconds,
+          })
+          .then((res) => res.data),
+        getVideo(id),
+      ]);
+      const url = video.playbackUrl ?? `${app}/embed/${id}`;
+      return `${url}${url.includes("?") ? "&" : "?"}token=${token}`;
     },
 
     ingestFromUrl: async (url: string, options?: IngestOptions): Promise<Asset> => {
-      const video = await http.post<ReheliosVideo>("/v1/videos", {
-        input_url: url,
-        ...(options ?? {}),
+      const video = await http.post<Envelope<ReheliosVideo>>("/v1/videos/import", {
+        url,
+        ...(options?.title !== undefined ? { title: options.title } : {}),
+        ...(config.collectionId !== undefined ? { collectionId: config.collectionId } : {}),
+        ...(config.visibility !== undefined ? { visibility: config.visibility } : {}),
       });
-      return toAsset(video);
+      return toAsset(video.data);
     },
 
     captions,
