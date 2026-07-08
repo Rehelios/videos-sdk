@@ -1,16 +1,38 @@
 ---
 title: Getting Started
-description: Install videos-sdk and make your first call in under a minute.
+description: Install videos-sdk and go from an empty project to playable video in a few steps.
 icon: Rocket
 ---
 
-## Install
+import { Step, Steps } from 'fumadocs-ui/components/steps';
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Videos SDK is one small, honest API over multiple video providers. You write against a
+single interface; the adapter decides which backend runs underneath. Swap the adapter and
+every call site stays the same — and the compiler stops you from calling something a
+provider can't do.
+
+<Steps>
+
+<Step>
+
+### Install
 
 ```bash
 bun add videos-sdk
+# npm i videos-sdk · pnpm add videos-sdk · yarn add videos-sdk
 ```
 
-## Your first call
+The core package has no provider dependencies. Mux ships its native client as an optional
+peer dependency (`@mux/mux-node`); the other adapters use `fetch`.
+
+</Step>
+
+<Step>
+
+### Create a client
+
+Pick an adapter and pass its config. This example uses rehelios, the reference adapter:
 
 ```ts
 import { createVideos } from 'videos-sdk';
@@ -19,14 +41,82 @@ import { rehelios } from 'videos-sdk/rehelios';
 const videos = createVideos({
   adapter: rehelios({ apiKey: process.env.REHELIOS_API_KEY! }),
 });
-
-const asset = await videos.upload('intro.mp4', file);
-const { hls } = await videos.playback(asset.id);
 ```
+
+`videos` is fully typed for that adapter — including which optional capabilities exist.
+
+</Step>
+
+<Step>
+
+### Upload a video
+
+`upload` takes a key and a body (`Blob`, `ReadableStream`, `Uint8Array`, `ArrayBuffer`, or
+`string`) and returns a normalized `Asset`:
+
+```ts
+const asset = await videos.upload('intro.mp4', file);
+
+asset.id;        // provider id, normalized to a string
+asset.status;    // "waiting_upload" | "uploading" | "processing" | "ready" | "errored"
+asset.duration;  // seconds, when known
+```
+
+For large files, prefer a resumable **signed upload URL** and upload straight from the
+browser — no bytes through your server:
+
+```ts
+const ticket = await videos.signedUploadUrl();
+// { url, id, method: "TUS" | "PUT" | "POST" } — hand `url` to the client
+```
+
+</Step>
+
+<Step>
+
+### Wait until it's ready
+
+Encoding is async on every provider. Poll `get` (or use [webhooks](/docs/guides/errors))
+and read the [normalized status](/docs/guides/lifecycle):
+
+```ts
+let current = await videos.get(asset.id);
+while (current.status === 'processing') {
+  await new Promise((r) => setTimeout(r, 2000));
+  current = await videos.get(asset.id);
+}
+```
+
+</Step>
+
+<Step>
+
+### Play it back
+
+`playback` returns manifest URLs and a poster; `thumbnail` builds a still at any timestamp:
+
+```ts
+const { hls, dash, poster } = await videos.playback(asset.id);
+const still = videos.thumbnail(asset.id, { time: 3 });
+
+// short-lived signed playback for private content
+const url = await videos.signedPlayback(asset.id, { expiresInSeconds: 3600 });
+```
+
+<Callout type="info">
+  `dash` only exists on the type for providers that support it (rehelios, Cloudflare). On
+  Mux or Bunny, reading `.dash` is a **compile error** — see [Capability-safe by
+  types](/docs/guides/capability-safety).
+</Callout>
+
+</Step>
+
+</Steps>
 
 ## Switch providers
 
-The only thing that changes is the adapter import and its config:
+The only thing that changes is the adapter import and its config. Every call site —
+`upload`, `get`, `list`, `delete`, `playback`, `thumbnail`, `signedPlayback` — is identical:
 
 ```ts
 import { mux } from 'videos-sdk/mux';
@@ -34,5 +124,23 @@ import { mux } from 'videos-sdk/mux';
 const videos = createVideos({ adapter: mux({ tokenId, tokenSecret }) });
 ```
 
-Every other call site — `upload`, `get`, `list`, `delete`, `playback`, `thumbnail`,
-`signedPlayback` — stays exactly the same.
+See the [adapters](/docs/adapters/rehelios) for each provider's config and capabilities.
+
+## Handling errors
+
+Every failure throws a typed `VideoError` with a discriminated `code`, so error handling
+is the same across providers:
+
+```ts
+import { VideoError } from 'videos-sdk';
+
+try {
+  await videos.get(id);
+} catch (error) {
+  if (error instanceof VideoError && error.code === 'not_found') {
+    // ...
+  }
+}
+```
+
+More in [Errors](/docs/guides/errors).
