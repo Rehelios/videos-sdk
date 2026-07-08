@@ -1,0 +1,25 @@
+---
+title: Cloudflare Stream
+description: The Cloudflare Stream adapter for videos-sdk.
+---
+
+```ts
+import { createVideos } from 'videos-sdk';
+import { cloudflare } from 'videos-sdk/cloudflare';
+
+const videos = createVideos({
+  adapter: cloudflare({ accountId, apiToken, customerSubdomain }),
+});
+```
+
+## Config
+
+| Option              | Type     | Required | Description                                  |
+| ------------------- | -------- | :------: | -------------------------------------------- |
+| `accountId`         | `string` |    ✓     | Cloudflare account id.                       |
+| `apiToken`          | `string` |    ✓     | API token with Stream permissions.           |
+| `customerSubdomain` | `string` |    ✓     | Your `customer-*.cloudflarestream.com` host. |
+
+## Capabilities
+
+Cloudflare Stream supports every capability, including DASH playback.

@@ -1,0 +1,38 @@
+---
+title: Getting Started
+description: Install videos-sdk and make your first call in under a minute.
+icon: Rocket
+---
+
+## Install
+
+```bash
+bun add videos-sdk
+```
+
+## Your first call
+
+```ts
+import { createVideos } from 'videos-sdk';
+import { rehelios } from 'videos-sdk/rehelios';
+
+const videos = createVideos({
+  adapter: rehelios({ apiKey: process.env.REHELIOS_API_KEY! }),
+});
+
+const asset = await videos.upload('intro.mp4', file);
+const { hls } = await videos.playback(asset.id);
+```
+
+## Switch providers
+
+The only thing that changes is the adapter import and its config:
+
+```ts
+import { mux } from 'videos-sdk/mux';
+
+const videos = createVideos({ adapter: mux({ tokenId, tokenSecret }) });
+```
+
+Every other call site — `upload`, `get`, `list`, `delete`, `playback`, `thumbnail`,
+`signedPlayback` — stays exactly the same.

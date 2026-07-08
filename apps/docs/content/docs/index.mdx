@@ -1,0 +1,29 @@
+---
+title: Introduction
+description: Agnostic, type-safe video SDK. One API across rehelios, Mux, Bunny Stream, and Cloudflare Stream.
+icon: Album
+---
+
+Videos SDK gives you one small, honest API over multiple video providers. Swap the
+adapter, keep every call site — and let the compiler catch what a provider can't do.
+
+```ts
+import { createVideos } from 'videos-sdk';
+import { rehelios } from 'videos-sdk/rehelios';
+
+const videos = createVideos({
+  adapter: rehelios({ apiKey: process.env.REHELIOS_API_KEY! }),
+});
+
+const asset = await videos.upload('intro.mp4', file);
+const { hls } = await videos.playback(asset.id);
+```
+
+## What you get
+
+<Cards>
+  <Card title="One interface" href="/docs/getting-started" description="create, upload, get, list, delete, playback, thumbnail, signedPlayback — the same calls on every adapter." />
+  <Card title="Capability-safe types" href="/docs/guides/capability-safety" description="Unsupported operations are compile errors, not runtime surprises." />
+  <Card title="Normalized lifecycle" href="/docs/guides/lifecycle" description="Every provider's status codes collapse to five canonical states." />
+  <Card title="Typed errors" href="/docs/guides/errors" description="Every failure throws a VideoError with a discriminated code." />
+</Cards>
