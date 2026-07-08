@@ -29,8 +29,8 @@ tooling and examples.
 | Lint      | `bun run lint`      |
 | Format    | `bun run format`    |
 
-Please run `bun run lint`, `bun run typecheck`, and `bun run test` before opening a PR
-— CI runs the same checks.
+Please run `bun run lint`, `bun run typecheck`, `bun run test`, and `bun run build`
+before opening a PR — CI runs exactly these checks.
 
 ## Making a change
 

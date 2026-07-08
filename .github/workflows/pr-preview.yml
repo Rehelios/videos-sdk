@@ -22,6 +22,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # need base..head to detect changelog files
+          persist-credentials: false # read-only job, never pushes
 
       - uses: oven-sh/setup-bun@v2
         with:

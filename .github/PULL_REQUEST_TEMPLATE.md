@@ -19,6 +19,7 @@ See CONTRIBUTING.md for the full workflow.
 - [ ] `bun run lint` passes
 - [ ] `bun run typecheck` passes
 - [ ] `bun run test` passes
+- [ ] `bun run build` passes
 - [ ] Added a changelog entry with `bun run release` (or this change has no user
       impact)
 - [ ] Updated docs / README if behavior or the API changed

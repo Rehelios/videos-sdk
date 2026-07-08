@@ -21,6 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false # comments via the API, never pushes
 
       - uses: oven-sh/setup-bun@v2
         with:
