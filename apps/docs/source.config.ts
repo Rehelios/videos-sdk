@@ -1,4 +1,5 @@
 import { defineConfig, defineDocs } from 'fumadocs-mdx/config';
+import { createJavaScriptRegexEngine } from 'shiki/engine/javascript';
 
 export const docs = defineDocs({
   dir: 'content/docs',
@@ -9,4 +10,10 @@ export const docs = defineDocs({
   },
 });
 
-export default defineConfig();
+export default defineConfig({
+  mdxOptions: {
+    rehypeCodeOptions: {
+      engine: createJavaScriptRegexEngine(),
+    },
+  },
+});

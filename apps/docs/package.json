@@ -5,7 +5,8 @@
   "sideEffects": false,
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "vite build; test -f .output/public/index.html",
+    "deploy": "wrangler pages deploy .output/public --project-name videos-sdk --branch main",
     "start": "vite preview",
     "preview": "vite preview",
     "types:check": "fumadocs-mdx && tsc --noEmit",
@@ -29,6 +30,7 @@
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.2",
     "@tailwindcss/vite": "^4.3.2",
     "@types/mdx": "^2.0.14",
     "@types/node": "^26.1.0",
@@ -36,9 +38,9 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "nitro": "3.0.260610-beta",
+    "shiki": "4.3.1",
     "tailwindcss": "^4.3.2",
     "typescript": "^6.0.3",
-    "vite": "^8.1.3",
-    "@biomejs/biome": "^2.5.2"
+    "vite": "^8.1.3"
   }
 }
