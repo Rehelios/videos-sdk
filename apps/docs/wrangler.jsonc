@@ -4,6 +4,7 @@
   "compatibility_date": "2026-07-08",
   "compatibility_flags": ["nodejs_compat"],
   "main": "@tanstack/react-start/server-entry",
+  "routes": [{ "pattern": "videos-sdk.com", "custom_domain": true }],
   "observability": {
     "enabled": true
   }
