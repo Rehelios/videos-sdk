@@ -16,11 +16,13 @@ const videos = createVideos({
 
 ## Config
 
-| Option         | Type     | Required | Description                     |
-| -------------- | -------- | :------: | ------------------------------- |
-| `apiKey`       | `string` |    ✓     | Your Rehelios API key.          |
-| `apiBaseUrl`   | `string` |    —     | Override the API base URL.      |
-| `playbackHost` | `string` |    —     | Override the playback/CDN host. |
+| Option         | Type                     | Required | Description                                          |
+| -------------- | ------------------------ | :------: | ---------------------------------------------------- |
+| `apiKey`       | `string`                 |    ✓     | Your Rehelios API key (`rh_live_…`).                 |
+| `collectionId` | `string`                 |    —     | Default collection for videos created/uploaded here. |
+| `visibility`   | `'public' \| 'private'`  |    —     | Default visibility for new videos.                   |
+| `apiBaseUrl`   | `string`                 |    —     | Override the API base URL.                           |
+| `appUrl`       | `string`                 |    —     | Override the app origin (embed / poster URLs).       |
 
 ## Capabilities
 
