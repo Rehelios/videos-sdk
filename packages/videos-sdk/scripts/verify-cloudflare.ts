@@ -1,5 +1,5 @@
-import { createVideos } from "../src/index";
 import { cloudflare } from "../src/cloudflare";
+import { createVideos } from "../src/index";
 
 const accountId = process.env.CF_ACCOUNT_ID;
 const apiToken = process.env.CF_API_TOKEN;

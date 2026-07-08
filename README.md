@@ -1,7 +1,17 @@
 # videos-sdk
 
+[![CI](https://github.com/Rehelios/videos-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/Rehelios/videos-sdk/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/videos-sdk.svg)](https://www.npmjs.com/package/videos-sdk)
+[![npm downloads](https://img.shields.io/npm/dm/videos-sdk.svg)](https://www.npmjs.com/package/videos-sdk)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+
 An agnostic, type-safe video SDK. One API across **rehelios**, **Mux**, **Bunny Stream**,
 and **Cloudflare Stream** — swap the provider, keep every call site.
+
+```bash
+npm install videos-sdk
+# or: bun add videos-sdk / pnpm add videos-sdk
+```
 
 ```ts
 import { createVideos } from "videos-sdk";
@@ -76,6 +86,23 @@ Bun workspaces monorepo. The published package is `packages/videos-sdk`.
 | Lint      | `bun run lint`      |
 | Format    | `bun run format`    |
 
+## Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup and the
+change workflow, and [AGENTS.md](./AGENTS.md) if you're an AI agent. In short: make your
+change, run `bun run release` to add a changelog entry, and open a PR — a bot comments a
+release preview on it.
+
+## Releases
+
+Versioning and publishing are automated with [Tegami](https://tegami.fuma-nama.dev):
+
+- Each PR carries a changelog entry describing its user-facing impact.
+- Merging to `main` opens a **Version Packages** PR that collects entries into a
+  version bump + `CHANGELOG.md`.
+- Merging that PR publishes to npm — with [provenance](https://docs.npmjs.com/generating-provenance-statements)
+  via OIDC trusted publishing — and creates the matching GitHub Release and tag.
+
 ## License
 
-MIT
+[MIT](./LICENSE) © Rehelios

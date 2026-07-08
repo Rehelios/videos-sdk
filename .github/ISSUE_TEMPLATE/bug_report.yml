@@ -1,0 +1,58 @@
+name: Bug report
+description: Something in videos-sdk isn't working as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug! Please fill out the fields below.
+        For security vulnerabilities, do **not** open a public issue — see SECURITY.md.
+  - type: dropdown
+    id: adapter
+    attributes:
+      label: Adapter
+      description: Which provider adapter are you using?
+      options:
+        - rehelios
+        - Mux
+        - Bunny Stream
+        - Cloudflare Stream
+        - Not adapter-specific / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, including the error message if any.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Minimal code snippet or steps that reproduce the problem.
+      render: ts
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen instead?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: videos-sdk version
+      placeholder: e.g. 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: Runtime & version
+      placeholder: e.g. Node 22.3, Bun 1.1.30, Cloudflare Workers
+    validations:
+      required: true

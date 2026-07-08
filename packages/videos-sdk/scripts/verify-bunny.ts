@@ -1,5 +1,5 @@
-import { createVideos } from "../src/index";
 import { bunny } from "../src/bunny";
+import { createVideos } from "../src/index";
 
 const libraryId = process.env.BUNNY_LIBRARY_ID;
 const apiKey = process.env.BUNNY_API_KEY;

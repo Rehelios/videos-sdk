@@ -1,37 +1,70 @@
 name: Release
 
-# Publishes packages/videos-sdk to npm via OIDC trusted publishing when a GitHub
-# Release is published (create one with a v-tag, e.g. v0.1.1). No tokens: npm
-# authenticates with a short-lived OIDC token and adds provenance automatically.
+# Changesets-style release flow, driven by Tegami (scripts/tegami.ts).
 #
-# One-time setup on npmjs.com (only after the first version exists):
-#   videos-sdk → Settings → Trusted Publisher → GitHub Actions
+# On every push to main:
+#   - If there are pending changelog entries under .tegami/changes/, Tegami opens
+#     (or updates) a "Version Packages" PR that bumps versions, writes CHANGELOG.md
+#     and the publish lock. Nothing is published on this run.
+#   - Once that PR is merged, the next push to main has no pending entries, so Tegami
+#     publishes packages/videos-sdk to npm (OIDC trusted publishing, with provenance)
+#     and creates the matching GitHub Release + tag automatically.
+#
+# Contributors never cut releases by hand: they add a changelog entry with
+# `bun run release` in their PR (see CONTRIBUTING.md), and merging the Version
+# Packages PR ships it.
+#
+# One-time setup on npmjs.com (after the first version exists):
+#   videos-sdk -> Settings -> Trusted Publisher -> GitHub Actions
 #     org/user: Rehelios · repo: videos-sdk · workflow: release.yml
+
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
   workflow_dispatch: {}
 
+# Serialize releases so two pushes can't publish or open the version PR at once.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 permissions:
-  contents: read
-  id-token: write
+  contents: write # push the version branch, create tags + GitHub Releases
+  pull-requests: write # open/update the "Version Packages" PR
+  id-token: write # npm OIDC trusted publishing
 
 jobs:
-  publish:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Tegami resolves commits/PRs from full history
+          # Optional: set a RELEASE_TOKEN (PAT) secret so the Version Packages PR
+          # triggers CI. With the default GITHUB_TOKEN, GitHub does not run
+          # workflows on token-authored PRs.
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: 'https://registry.npmjs.org'
+          registry-url: "https://registry.npmjs.org"
+
       # Trusted publishing needs npm >= 11.5.1
       - run: npm install -g npm@latest
+
       - run: bun install --frozen-lockfile
-      - run: bun run --filter videos-sdk build
+
+      # Safety gate before publishing (the Version Packages PR itself doesn't run CI).
+      - run: bun run typecheck
       - run: bun run --filter videos-sdk test
-      - run: npm publish
-        working-directory: packages/videos-sdk
+
+      - name: Version PR or publish
+        run: bun scripts/tegami.ts ci
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
