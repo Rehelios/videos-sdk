@@ -1,35 +1,90 @@
 ---
 title: Errors
-description: Typed VideoError with a discriminated code across every provider.
+description: One typed error across every provider — a VideoError with a discriminated code.
 ---
 
-Every failure throws a `VideoError` with a discriminated `code`, so you handle failures
-the same way no matter which provider is behind the adapter.
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Every provider fails differently — different status codes, different response shapes,
+different SDKs. Videos SDK collapses all of that into **one error type**: a `VideoError`
+with a discriminated `code`. You write your error handling once and it holds no matter
+which adapter is underneath.
+
+## The shape
+
+`VideoError` extends the native `Error`, so `instanceof`, stack traces, and the `cause`
+chain all work as usual. On top of that it carries:
+
+```ts
+class VideoError extends Error {
+  code: VideoErrorCode;      // discriminated — switch on this
+  provider?: string;         // "rehelios" | "mux" | "bunny" | "cloudflare"
+  status?: number;           // upstream HTTP status, when there was one
+  cause?: unknown;           // the original provider error
+}
+```
+
+## Codes
+
+| `code`                  | When it happens                                              |
+| ----------------------- | ----------------------------------------------------------- |
+| `unauthorized`          | Bad or missing credentials (HTTP 401 / 403).                |
+| `not_found`             | The asset doesn't exist (HTTP 404).                         |
+| `unsupported_operation` | The provider can't do this — also a **compile error**.      |
+| `upload_failed`         | The bytes didn't make it to the provider.                   |
+| `rate_limited`          | Too many requests (HTTP 429). Back off and retry.           |
+| `provider_error`        | The provider returned something unexpected (usually 5xx).   |
+| `network`               | The request never completed (DNS, timeout, offline).        |
+| `invalid_request`       | Bad arguments before any request went out.                  |
+
+## Handling it
+
+Narrow on `code` — it's a string literal union, so the compiler checks your branches:
 
 ```ts
 import { VideoError } from 'videos-sdk';
 
 try {
-  await videos.get(id);
+  return await videos.get(id);
 } catch (error) {
-  if (error instanceof VideoError && error.code === 'not_found') {
-    // ...
+  if (!(error instanceof VideoError)) throw error;
+
+  switch (error.code) {
+    case 'not_found':
+      return null; // treat a missing asset as empty
+    case 'unauthorized':
+      throw new Error('Check your provider credentials');
+    default:
+      throw error; // anything else bubbles up
   }
 }
 ```
 
-## Error codes
+### Retrying rate limits
+
+`rate_limited` and transient `network` / `provider_error` failures are the ones worth
+retrying. Everything else is a bug in your call, not a blip:
 
 ```ts
-type VideoErrorCode =
-  | 'unauthorized'          // bad credentials (401 / 403)
-  | 'not_found'             // 404
-  | 'unsupported_operation' // provider can't do this (also a compile error)
-  | 'upload_failed'
-  | 'rate_limited'          // 429
-  | 'provider_error'        // unexpected provider response
-  | 'network'               // request never completed
-  | 'invalid_request';      // bad arguments
+async function withRetry<T>(fn: () => Promise<T>, tries = 3): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      const retryable =
+        error instanceof VideoError &&
+        (error.code === 'rate_limited' || error.code === 'network');
+      if (!retryable || attempt >= tries) throw error;
+      await new Promise((r) => setTimeout(r, 2 ** attempt * 250));
+    }
+  }
+}
+
+const asset = await withRetry(() => videos.get(id));
 ```
 
-Each `VideoError` also carries `provider` and, when available, the HTTP `status`.
+<Callout type="info">
+  `unsupported_operation` almost never reaches runtime — the [capability
+  types](/docs/guides/capability-safety) stop you from calling an operation a provider
+  doesn't support at compile time. You only hit it if you force a call through a cast.
+</Callout>

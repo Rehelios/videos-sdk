@@ -26,13 +26,14 @@ if (status === 'ready') {
 
 ## How providers map
 
-| Canonical        | Mux         | Cloudflare Stream        | Bunny Stream                     |
-| ---------------- | ----------- | ------------------------ | -------------------------------- |
-| `waiting_upload` | —           | `pendingupload`          | `0` Created                      |
-| `uploading`      | —           | `downloading`            | `1` Uploaded                     |
-| `processing`     | `preparing` | `queued` · `inprogress`  | `2` Processing · `3` Transcoding |
-| `ready`          | `ready`     | `ready`                  | `4` Finished                     |
-| `errored`        | `errored`   | `error`                  | `5` Error · `6` UploadFailed     |
+| Canonical        | Rehelios         | Mux         | Cloudflare Stream       | Bunny Stream                     |
+| ---------------- | ---------------- | ----------- | ----------------------- | -------------------------------- |
+| `waiting_upload` | `waiting_upload` | —           | `pendingupload`         | `0` Created                      |
+| `uploading`      | `uploading`      | —           | `downloading`           | `1` Uploaded                     |
+| `processing`     | `processing`     | `preparing` | `queued` · `inprogress` | `2` Processing · `3` Transcoding |
+| `ready`          | `ready`          | `ready`     | `ready`                 | `4` Finished                     |
+| `errored`        | `errored`        | `errored`   | `error`                 | `5` Error · `6` UploadFailed     |
 
-An unknown or new provider status falls back to `processing`, so your app never sees a
-value outside the five canonical states.
+Rehelios returns the canonical statuses natively; the other adapters normalize their
+provider-specific codes into them. An unknown or new provider status falls back to
+`processing`, so your app never sees a value outside the five canonical states.

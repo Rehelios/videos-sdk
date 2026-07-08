@@ -6,6 +6,7 @@ icon: Rocket
 
 import { Step, Steps } from 'fumadocs-ui/components/steps';
 import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 Videos SDK is one small, honest API over multiple video providers. You write against a
 single interface; the adapter decides which backend runs underneath. Swap the adapter and
@@ -18,10 +19,28 @@ provider can't do.
 
 ### Install
 
+<Tabs items={['bun', 'npm', 'pnpm', 'yarn']}>
+<Tab value="bun">
 ```bash
 bun add videos-sdk
-# npm i videos-sdk · pnpm add videos-sdk · yarn add videos-sdk
 ```
+</Tab>
+<Tab value="npm">
+```bash
+npm install videos-sdk
+```
+</Tab>
+<Tab value="pnpm">
+```bash
+pnpm add videos-sdk
+```
+</Tab>
+<Tab value="yarn">
+```bash
+yarn add videos-sdk
+```
+</Tab>
+</Tabs>
 
 The core package has no provider dependencies. Mux ships its native client as an optional
 peer dependency (`@mux/mux-node`); the other adapters use `fetch`.
@@ -32,7 +51,7 @@ peer dependency (`@mux/mux-node`); the other adapters use `fetch`.
 
 ### Create a client
 
-Pick an adapter and pass its config. This example uses rehelios, the reference adapter:
+Pick an adapter and pass its config. This example uses Rehelios, the reference adapter:
 
 ```ts
 import { createVideos } from 'videos-sdk';
@@ -104,7 +123,7 @@ const url = await videos.signedPlayback(asset.id, { expiresInSeconds: 3600 });
 ```
 
 <Callout type="info">
-  `dash` only exists on the type for providers that support it (rehelios, Cloudflare). On
+  `dash` only exists on the type for providers that support it (Rehelios, Cloudflare). On
   Mux or Bunny, reading `.dash` is a **compile error** — see [Capability-safe by
   types](/docs/guides/capability-safety).
 </Callout>

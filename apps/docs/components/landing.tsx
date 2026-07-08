@@ -4,9 +4,10 @@ import { DynamicCodeBlock } from 'fumadocs-ui/components/dynamic-codeblock';
 import { Check, Copy, Lock, Play } from 'lucide-react';
 import Link from 'next/link';
 import { type ReactNode, useState } from 'react';
+import { VideoDemo } from '@/components/video-demo';
 
 const PROVIDERS = [
-  { id: 'rehelios', label: 'rehelios', factory: 'rehelios({ apiKey: process.env.REHELIOS_API_KEY! })' },
+  { id: 'rehelios', label: 'Rehelios', factory: 'rehelios({ apiKey: process.env.REHELIOS_API_KEY! })' },
   { id: 'mux', label: 'Mux', factory: 'mux({ tokenId, tokenSecret })' },
   { id: 'bunny', label: 'Bunny Stream', factory: 'bunny({ libraryId, apiKey, pullZone })' },
   { id: 'cloudflare', label: 'Cloudflare Stream', factory: 'cloudflare({ accountId, apiToken, customerSubdomain })' },
@@ -190,7 +191,7 @@ function Hero() {
         Stream <span className="font-serif-accent text-fd-primary">anywhere.</span>
       </h1>
       <p className="mt-6 max-w-2xl text-balance text-fd-muted-foreground text-lg">
-        One type-safe API for video across rehelios, Mux, Bunny Stream, and Cloudflare Stream. Swap the adapter, keep every call site — and let the compiler catch what a provider can't do.
+        One type-safe API for video across Rehelios, Mux, Bunny Stream, and Cloudflare Stream. Swap the adapter, keep every call site — and let the compiler catch what a provider can't do.
       </p>
       <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
         <CopyButton text="bun add videos-sdk" />
@@ -289,7 +290,7 @@ const url = await videos.signedPlayback(id, {
 
 function CapabilitiesMatrix() {
   const columns = [
-    { id: 'rehelios', label: 'rehelios' },
+    { id: 'rehelios', label: 'Rehelios' },
     { id: 'mux', label: 'Mux' },
     { id: 'bunny', label: 'Bunny' },
     { id: 'cloudflare', label: 'Cloudflare' },
@@ -349,6 +350,9 @@ export function Landing() {
   return (
     <main className="flex-1">
       <Hero />
+      <section className="mx-auto w-full max-w-xl px-4 pb-10">
+        <VideoDemo />
+      </section>
       <ProvidersShowcase />
       <Features />
       <CapabilitiesMatrix />
