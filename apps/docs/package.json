@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build; test -f .output/public/index.html",
-    "deploy": "wrangler pages deploy .output/public --project-name videos-sdk --branch main",
+    "deploy": "bunx wrangler pages deploy .output/public --project-name videos-sdk --branch main",
     "start": "vite preview",
     "preview": "vite preview",
     "types:check": "fumadocs-mdx && tsc --noEmit",
