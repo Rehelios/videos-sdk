@@ -24,7 +24,10 @@ export interface CloudflareConfig {
   readonly accountId: string;
   readonly apiToken: string;
   readonly customerSubdomain: string;
+  readonly maxDurationSeconds?: number;
 }
+
+const DEFAULT_MAX_DURATION = 21600;
 
 export type CloudflareCapabilities = {
   readonly dash: true;
@@ -90,14 +93,18 @@ export function cloudflare(config: CloudflareConfig): VideoAdapter<CloudflareCap
     headers: { authorization: `Bearer ${config.apiToken}` },
   });
 
+  const maxDuration = config.maxDurationSeconds ?? DEFAULT_MAX_DURATION;
+
   function toAsset(video: CloudflareVideo): Asset {
     return {
       id: video.uid,
       status: toStatus(video.status?.state ?? undefined),
       raw: video,
-      ...(video.duration != null ? { duration: video.duration } : {}),
-      ...(video.input?.width != null ? { width: video.input.width } : {}),
-      ...(video.input?.height != null ? { height: video.input.height } : {}),
+      ...(video.duration != null && video.duration > 0 ? { duration: video.duration } : {}),
+      ...(video.input?.width != null && video.input.width > 0 ? { width: video.input.width } : {}),
+      ...(video.input?.height != null && video.input.height > 0
+        ? { height: video.input.height }
+        : {}),
       ...(video.created !== undefined ? { createdAt: new Date(video.created) } : {}),
     };
   }
@@ -125,21 +132,29 @@ export function cloudflare(config: CloudflareConfig): VideoAdapter<CloudflareCap
     raw: config,
 
     create: async (): Promise<Asset> => {
-      const upload = (await http.post<Wrapped<DirectUpload>>("/direct_upload", {})).result;
+      const upload = (
+        await http.post<Wrapped<DirectUpload>>("/direct_upload", {
+          maxDurationSeconds: maxDuration,
+        })
+      ).result;
       return toAsset({ uid: upload.uid, status: { state: "pendingupload" } });
     },
 
-    signedUploadUrl: async (options?: SignedUploadUrlOptions): Promise<UploadTicket> => {
+    signedUploadUrl: async (_options?: SignedUploadUrlOptions): Promise<UploadTicket> => {
       const upload = (
         await http.post<Wrapped<DirectUpload>>("/direct_upload", {
-          ...(options?.maxSizeBytes !== undefined ? { maxDurationSeconds: 3600 } : {}),
+          maxDurationSeconds: maxDuration,
         })
       ).result;
       return { id: upload.uid, url: upload.uploadURL, method: "POST" };
     },
 
     upload: async (key: string, body: VideoBody, options?: UploadOptions): Promise<Asset> => {
-      const upload = (await http.post<Wrapped<DirectUpload>>("/direct_upload", {})).result;
+      const upload = (
+        await http.post<Wrapped<DirectUpload>>("/direct_upload", {
+          maxDurationSeconds: maxDuration,
+        })
+      ).result;
       const form = new FormData();
       const blob =
         body instanceof Blob
@@ -166,7 +181,7 @@ export function cloudflare(config: CloudflareConfig): VideoAdapter<CloudflareCap
       const query = new URLSearchParams();
       if (options?.limit !== undefined) query.set("limit", String(options.limit));
       const suffix = query.size > 0 ? `?${query.toString()}` : "";
-      const page = await http.get<Wrapped<readonly CloudflareVideo[]>>(`/${suffix}`);
+      const page = await http.get<Wrapped<readonly CloudflareVideo[]>>(suffix);
       return page.result.map(toAsset);
     },
 

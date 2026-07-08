@@ -14,11 +14,12 @@ const videos = createVideos({
 
 ## Config
 
-| Option              | Type     | Required | Description                                  |
-| ------------------- | -------- | :------: | -------------------------------------------- |
-| `accountId`         | `string` |    ✓     | Cloudflare account id.                       |
-| `apiToken`          | `string` |    ✓     | API token with Stream permissions.           |
-| `customerSubdomain` | `string` |    ✓     | Your `customer-*.cloudflarestream.com` host. |
+| Option               | Type     | Required | Description                                          |
+| -------------------- | -------- | :------: | ---------------------------------------------------- |
+| `accountId`          | `string` |    ✓     | Cloudflare account id.                               |
+| `apiToken`           | `string` |    ✓     | API token with Stream permissions.                   |
+| `customerSubdomain`  | `string` |    ✓     | Your `customer-*.cloudflarestream.com` host.         |
+| `maxDurationSeconds` | `number` |    —     | Max video length for direct uploads (default 21600). |
 
 ## Capabilities
 
