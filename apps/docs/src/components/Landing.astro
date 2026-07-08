@@ -1,0 +1,287 @@
+---
+import { Code, Tabs, TabItem } from '@astrojs/starlight/components';
+
+const providers = [
+  {
+    id: 'rehelios',
+    label: 'rehelios',
+    factory: 'rehelios({ apiKey: process.env.REHELIOS_API_KEY! })',
+  },
+  { id: 'mux', label: 'Mux', factory: 'mux({ tokenId, tokenSecret })' },
+  { id: 'bunny', label: 'Bunny Stream', factory: 'bunny({ libraryId, apiKey, pullZone })' },
+  {
+    id: 'cloudflare',
+    label: 'Cloudflare Stream',
+    factory: 'cloudflare({ accountId, apiToken, customerSubdomain })',
+  },
+];
+
+const snippet = (factory: string, id: string) =>
+  `import { createVideos } from "videos-sdk";
+import { ${id} } from "videos-sdk/${id}";
+
+const videos = createVideos({
+  adapter: ${factory},
+});
+
+await videos.upload("intro.mp4", file);
+const { hls } = await videos.playback(id);
+const poster = videos.thumbnail(id, { time: 3 });`;
+
+const capabilities = [
+  { name: 'Resumable upload', rehelios: true, mux: true, bunny: true, cloudflare: true },
+  { name: 'Ingest from URL', rehelios: true, mux: true, bunny: true, cloudflare: true },
+  { name: 'HLS playback', rehelios: true, mux: true, bunny: true, cloudflare: true },
+  { name: 'DASH playback', rehelios: true, mux: false, bunny: false, cloudflare: true },
+  { name: 'Signed playback', rehelios: true, mux: true, bunny: true, cloudflare: true },
+  { name: 'Thumbnail at time', rehelios: true, mux: true, bunny: false, cloudflare: true },
+  { name: 'Captions', rehelios: true, mux: true, bunny: true, cloudflare: true },
+  { name: 'Webhooks', rehelios: true, mux: true, bunny: true, cloudflare: true },
+];
+const cols = ['rehelios', 'mux', 'bunny', 'cloudflare'] as const;
+
+const everyOp = `await videos.upload("intro.mp4", file);
+const asset = await videos.get(id);
+const page = await videos.list({ limit: 20 });
+await videos.delete(id);`;
+
+const typeSafe = `const mux = createVideos({ adapter: mux(cfg) });
+(await mux.playback(id)).dash;
+//                       ❌ Mux has no DASH
+
+const cf = createVideos({ adapter: cloudflare(cfg) });
+(await cf.playback(id)).dash; // ✅ string`;
+
+const lifecycle = `const { status } = await videos.get(id);
+// "waiting_upload" | "uploading"
+// "processing" | "ready" | "errored"`;
+
+const playback = `const { hls, dash } = await videos.playback(id);
+const poster = videos.thumbnail(id, { time: 3 });
+const url = await videos.signedPlayback(id, {
+  expiresInSeconds: 3600,
+});`;
+---
+
+<div class="rh-landing">
+  <!-- Hero -->
+  <section class="hero">
+    <a href="/getting-started/" class="pill"><span class="dot"></span>v0.0.0 — early preview →</a>
+    <h1>Upload once.<br />Stream <span class="font-serif-accent">anywhere.</span></h1>
+    <p class="lede">
+      One type-safe API for video across rehelios, Mux, Bunny Stream, and Cloudflare Stream. Swap the
+      adapter, keep every call site — and let the compiler catch what a provider can't do.
+    </p>
+    <div class="cta">
+      <button class="copy" data-copy="bun add videos-sdk">
+        <span class="dollar">$</span>bun add videos-sdk<span class="ico">⧉</span>
+      </button>
+      <a href="/getting-started/" class="docs-link">Read the docs →</a>
+    </div>
+  </section>
+
+  <!-- Providers -->
+  <section class="band">
+    <p class="eyebrow">Live snippet</p>
+    <h2>The exact same code. <span class="font-serif-accent">Any provider.</span></h2>
+    <p class="sub">Switch the adapter, keep every call site — the same upload, playback, and thumbnail sequence across four providers.</p>
+    <div class="snippet">
+      <Tabs>
+        {providers.map((p) => (
+          <TabItem label={p.label}>
+            <Code code={snippet(p.factory, p.id)} lang="ts" />
+          </TabItem>
+        ))}
+      </Tabs>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="band">
+    <p class="eyebrow">Capabilities</p>
+    <h2>Everything you need for <span class="font-serif-accent">video.</span></h2>
+    <p class="sub">A complete set of operations behind one interface, capability-safe by types, with a normalized asset lifecycle and playback that works the same on every provider.</p>
+
+    <div class="feature">
+      <div class="feature-head"><h3>Every operation, one interface</h3><a href="/getting-started/">Read the docs →</a></div>
+      <p class="feature-desc">create, upload, get, list, delete — the same calls on every adapter, returning one normalized Asset. No provider types leak into your code.</p>
+      <div class="feature-grid">
+        <Code code={everyOp} lang="ts" />
+        <div class="demo">
+          <div class="row"><span class="fname">intro.mp4</span><span class="meta"><span class="size">48 MB</span><span class="pill-s ready">ready</span></span></div>
+          <div class="row"><span class="fname">webinar.mp4</span><span class="meta"><span class="size">1.2 GB</span><span class="pill-s proc">processing</span></span></div>
+          <div class="row"><span class="fname">promo.mov</span><span class="meta"><span class="size">210 MB</span><span class="pill-s ready">ready</span></span></div>
+          <div class="row"><span class="fname">raw-take.mkv</span><span class="meta"><span class="size">3.4 GB</span><span class="pill-s wait">waiting_upload</span></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feature">
+      <div class="feature-head"><h3>Unsupported is a compile error</h3><a href="/guides/capability-safety/">Read the docs →</a></div>
+      <p class="feature-desc">Each adapter declares its capabilities as literal types. The API narrows to match, so a provider that can't do something never lets you call it.</p>
+      <div class="feature-grid">
+        <Code code={typeSafe} lang="ts" />
+        <div class="demo mono">
+          <div><span class="dim">await</span> mux.playback(id).<span class="squiggle">dash</span></div>
+          <div class="err">Property 'dash' does not exist on type 'Playback'.</div>
+          <div><span class="dim">await</span> cf.playback(id).dash <span class="ok">✓ string</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feature">
+      <div class="feature-head"><h3>One normalized lifecycle</h3><a href="/guides/lifecycle/">Read the docs →</a></div>
+      <p class="feature-desc">Every provider's status codes collapse to five canonical states, so your app reads the same asset lifecycle no matter what's behind the adapter.</p>
+      <div class="feature-grid">
+        <Code code={lifecycle} lang="ts" />
+        <div class="demo">
+          <div class="step"><span class="num">1</span><span class="pill-s wait">waiting_upload</span></div>
+          <div class="step"><span class="num">2</span><span class="pill-s proc">processing</span></div>
+          <div class="step"><span class="num on">3</span><span class="pill-s ready">ready</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feature">
+      <div class="feature-head"><h3>Playback &amp; signed URLs</h3><a href="/adapters/rehelios/">Read the docs →</a></div>
+      <p class="feature-desc">HLS and DASH manifests, poster thumbnails at any timestamp, and short-lived signed playback URLs — one shape across every backend.</p>
+      <div class="feature-grid">
+        <Code code={playback} lang="ts" />
+        <div class="demo player">
+          <div class="screen"><span class="play">▶</span><span class="lock">🔒 signed</span></div>
+          <div class="bar"><span class="badge">HLS</span><span class="badge">DASH</span><span class="time">2:14</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Matrix -->
+  <section class="band">
+    <h2>One interface, <span class="font-serif-accent">honest</span> about the differences.</h2>
+    <div class="matrix">
+      <table>
+        <thead>
+          <tr><th>Capability</th>{cols.map((c) => <th>{c === 'cloudflare' ? 'Cloudflare' : c === 'mux' ? 'Mux' : c === 'bunny' ? 'Bunny' : 'rehelios'}</th>)}</tr>
+        </thead>
+        <tbody>
+          {capabilities.map((row) => (
+            <tr>
+              <td class="cap">{row.name}</td>
+              {cols.map((c) => <td class="cell">{row[c] ? <span class="yes">✓</span> : <span class="no">—</span>}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Footer CTA -->
+  <section class="footer-cta">
+    <h2>Ship the video layer <span class="font-serif-accent">once.</span></h2>
+    <p>Open source, MIT licensed, built around web standards. Drop in an adapter and forget the difference.</p>
+    <button class="copy" data-copy="bun add videos-sdk"><span class="dollar">$</span>bun add videos-sdk<span class="ico">⧉</span></button>
+  </section>
+</div>
+
+<script>
+  document.querySelectorAll<HTMLButtonElement>('.copy').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const text = btn.dataset.copy ?? '';
+      navigator.clipboard.writeText(text).then(() => {
+        const ico = btn.querySelector('.ico');
+        if (ico) {
+          ico.textContent = '✓';
+          setTimeout(() => (ico.textContent = '⧉'), 1500);
+        }
+      });
+    });
+  });
+</script>
+
+<style>
+  .rh-landing { width: 100%; }
+  .rh-landing h1, .rh-landing h2, .rh-landing h3 { border: 0; margin: 0; }
+
+  /* Hero */
+  .hero { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 4rem 1rem 3rem; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 0.5rem; margin-bottom: 2rem;
+    border: 1px solid var(--sl-color-hairline); border-radius: 999px; padding: 0.25rem 0.75rem;
+    font-family: var(--sl-font-mono); font-size: 0.75rem; color: var(--sl-color-gray-3); text-decoration: none;
+  }
+  .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--sl-color-text-accent); }
+  .hero h1 { font-size: clamp(2.75rem, 8vw, 4.75rem); line-height: 0.98; letter-spacing: -0.03em; font-weight: 600; }
+  .font-serif-accent { color: var(--sl-color-text-accent); }
+  .lede { max-width: 40rem; margin: 1.5rem auto 0; color: var(--sl-color-gray-3); font-size: 1.125rem; }
+  .cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 1rem; margin-top: 2.5rem; }
+  .copy {
+    display: inline-flex; align-items: center; gap: 0.5rem; border: 1px solid var(--sl-color-hairline);
+    background: var(--sl-color-bg-nav); border-radius: 999px; padding: 0.55rem 1.1rem;
+    font-family: var(--sl-font-mono); font-size: 0.875rem; color: var(--sl-color-white); cursor: pointer;
+  }
+  .copy:hover { background: var(--sl-color-gray-6); }
+  .dollar { color: var(--sl-color-gray-4); }
+  .ico { color: var(--sl-color-gray-4); }
+  .docs-link { color: var(--sl-color-white); font-weight: 500; font-size: 0.9rem; text-decoration: none; }
+  .docs-link:hover { text-decoration: underline; }
+
+  /* Bands */
+  .band { max-width: 52rem; margin: 0 auto; padding: 4rem 1rem; }
+  .eyebrow { text-align: center; font-family: var(--sl-font-mono); font-size: 0.72rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--sl-color-gray-3); margin-bottom: 0.75rem; }
+  .band > h2 { text-align: center; font-size: clamp(1.8rem, 4vw, 2.4rem); letter-spacing: -0.02em; font-weight: 600; }
+  .sub { text-align: center; max-width: 36rem; margin: 1rem auto 0; color: var(--sl-color-gray-3); }
+  .snippet { margin-top: 2rem; }
+
+  /* Features */
+  .feature { padding: 2.5rem 0; border-top: 1px solid var(--sl-color-hairline-light); }
+  .feature:first-of-type { border-top: 0; }
+  .feature-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+  .feature-head h3 { font-size: 1.25rem; letter-spacing: -0.01em; font-weight: 600; }
+  .feature-head a { flex-shrink: 0; color: var(--sl-color-gray-3); font-size: 0.875rem; text-decoration: none; }
+  .feature-head a:hover { color: var(--sl-color-white); }
+  .feature-desc { max-width: 32rem; margin-top: 0.75rem; color: var(--sl-color-gray-3); font-size: 0.9rem; }
+  .feature-grid { display: grid; gap: 1rem; margin-top: 1.5rem; }
+  @media (min-width: 50rem) { .feature-grid { grid-template-columns: 1fr 1fr; align-items: start; } }
+
+  .demo { display: flex; flex-direction: column; gap: 0.5rem; padding: 1.25rem; border: 1px solid var(--sl-color-hairline); border-radius: 0.75rem; background: var(--sl-color-bg-nav); }
+  .demo.mono { font-family: var(--sl-font-mono); font-size: 0.8rem; gap: 0.75rem; }
+  .row { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0.75rem; border: 1px solid var(--sl-color-hairline); border-radius: 0.5rem; background: var(--sl-color-bg); font-size: 0.875rem; }
+  .fname { font-weight: 500; }
+  .meta { display: flex; align-items: center; gap: 0.75rem; }
+  .size { font-family: var(--sl-font-mono); font-size: 0.72rem; color: var(--sl-color-gray-3); }
+  .pill-s { border-radius: 999px; padding: 0.1rem 0.5rem; font-family: var(--sl-font-mono); font-size: 0.68rem; }
+  .pill-s.ready { background: color-mix(in oklch, #10b981 20%, transparent); color: #059669; }
+  .pill-s.proc { background: color-mix(in oklch, var(--sl-color-text-accent) 20%, transparent); color: var(--sl-color-text-accent); }
+  .pill-s.wait { background: var(--sl-color-gray-6); color: var(--sl-color-gray-3); }
+  .dim { color: var(--sl-color-gray-4); }
+  .squiggle { text-decoration: underline wavy #ef4444; text-underline-offset: 3px; }
+  .err { width: fit-content; border: 1px solid color-mix(in oklch, #ef4444 40%, transparent); background: color-mix(in oklch, #ef4444 12%, transparent); color: #dc2626; border-radius: 0.375rem; padding: 0.4rem 0.7rem; font-size: 0.75rem; }
+  .ok { color: #059669; }
+  .step { display: flex; align-items: center; gap: 0.75rem; }
+  .num { display: inline-flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; border-radius: 999px; background: var(--sl-color-gray-6); color: var(--sl-color-gray-3); font-family: var(--sl-font-mono); font-size: 0.7rem; }
+  .num.on { background: var(--sl-color-text-accent); color: var(--sl-color-bg); }
+  .player { padding: 0; overflow: hidden; }
+  .screen { position: relative; display: flex; align-items: center; justify-content: center; aspect-ratio: 16 / 9; background: linear-gradient(135deg, color-mix(in oklch, var(--sl-color-text-accent) 30%, transparent), var(--sl-color-gray-6)); }
+  .play { font-size: 1.5rem; color: var(--sl-color-white); }
+  .lock { position: absolute; top: 0.6rem; left: 0.6rem; background: color-mix(in oklch, var(--sl-color-bg) 75%, transparent); border-radius: 999px; padding: 0.1rem 0.5rem; font-family: var(--sl-font-mono); font-size: 0.6rem; }
+  .bar { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: var(--sl-color-bg); }
+  .badge { background: var(--sl-color-gray-6); border-radius: 0.375rem; padding: 0.1rem 0.5rem; font-family: var(--sl-font-mono); font-size: 0.62rem; }
+  .time { margin-left: auto; font-family: var(--sl-font-mono); font-size: 0.62rem; color: var(--sl-color-gray-3); }
+
+  /* Matrix */
+  .matrix { margin-top: 2rem; overflow-x: auto; }
+  .matrix table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+  .matrix th, .matrix td { padding: 0.7rem 1rem; }
+  .matrix thead th { text-align: center; border-bottom: 1px solid var(--sl-color-hairline); font-weight: 500; }
+  .matrix thead th:first-child { text-align: left; color: var(--sl-color-gray-3); }
+  .matrix tbody tr { border-bottom: 1px solid var(--sl-color-hairline-light); }
+  .cap { color: var(--sl-color-gray-3); }
+  .cell { text-align: center; }
+  .yes { color: var(--sl-color-text-accent); font-weight: 600; }
+  .no { color: var(--sl-color-gray-4); }
+
+  /* Footer */
+  .footer-cta { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 6rem 1rem; border-top: 1px solid var(--sl-color-hairline); }
+  .footer-cta h2 { font-size: clamp(2rem, 5vw, 2.75rem); letter-spacing: -0.02em; font-weight: 600; }
+  .footer-cta p { max-width: 30rem; margin: 1rem auto 2rem; color: var(--sl-color-gray-3); }
+</style>

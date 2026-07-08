@@ -1,0 +1,35 @@
+---
+title: Errors
+description: Typed VideoError with a discriminated code across every provider.
+---
+
+Every failure throws a `VideoError` with a discriminated `code`, so you handle failures
+the same way no matter which provider is behind the adapter.
+
+```ts
+import { VideoError } from 'videos-sdk';
+
+try {
+  await videos.get(id);
+} catch (error) {
+  if (error instanceof VideoError && error.code === 'not_found') {
+    // ...
+  }
+}
+```
+
+## Error codes
+
+```ts
+type VideoErrorCode =
+  | 'unauthorized'          // bad credentials (401 / 403)
+  | 'not_found'            // 404
+  | 'unsupported_operation' // provider can't do this (also a compile error)
+  | 'upload_failed'
+  | 'rate_limited'         // 429
+  | 'provider_error'       // unexpected provider response
+  | 'network'              // request never completed
+  | 'invalid_request';     // bad arguments
+```
+
+Each `VideoError` also carries `provider` and, when available, the HTTP `status`.
