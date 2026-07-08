@@ -1,8 +1,12 @@
 name: Release
 
-# Publishes packages/videos-sdk to npm whenever a GitHub Release is published
-# (create one with a v-tag, e.g. v0.1.0). Uses the NPM_TOKEN secret (an npm
-# Automation/Granular token that bypasses 2FA) and adds build provenance.
+# Publishes packages/videos-sdk to npm via OIDC trusted publishing when a GitHub
+# Release is published (create one with a v-tag, e.g. v0.1.1). No tokens: npm
+# authenticates with a short-lived OIDC token and adds provenance automatically.
+#
+# One-time setup on npmjs.com (only after the first version exists):
+#   videos-sdk → Settings → Trusted Publisher → GitHub Actions
+#     org/user: Rehelios · repo: videos-sdk · workflow: release.yml
 on:
   release:
     types: [published]
@@ -24,10 +28,10 @@ jobs:
         with:
           node-version: 22
           registry-url: 'https://registry.npmjs.org'
+      # Trusted publishing needs npm >= 11.5.1
+      - run: npm install -g npm@latest
       - run: bun install --frozen-lockfile
       - run: bun run --filter videos-sdk build
       - run: bun run --filter videos-sdk test
-      - run: npm publish --provenance --access public
+      - run: npm publish
         working-directory: packages/videos-sdk
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
