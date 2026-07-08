@@ -14,9 +14,14 @@ name: Release
 # `bun run release` in their PR (see CONTRIBUTING.md), and merging the Version
 # Packages PR ships it.
 #
-# One-time setup on npmjs.com (after the first version exists):
-#   videos-sdk -> Settings -> Trusted Publisher -> GitHub Actions
-#     org/user: Rehelios · repo: videos-sdk · workflow: release.yml
+# One-time bootstrap (solves npm's egg-or-chicken: the package must exist before
+# a trusted publisher can be configured). Run locally, once:
+#   npm login
+#   bun run release                 # add a changelog entry
+#   bun scripts/tegami.ts version   # write the publish lock
+#   bun scripts/tegami.ts npm pretrust
+# `pretrust` publishes a placeholder and configures npm trusted publishing for
+# this workflow automatically — no npmjs.com UI needed. See CONTRIBUTING.md.
 
 on:
   push:

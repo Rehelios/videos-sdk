@@ -74,6 +74,24 @@ You don't cut releases by hand:
    trusted publishing, with provenance) and a matching **GitHub Release + tag** is
    created automatically.
 
+## Maintainers: first-time npm setup
+
+npm trusted publishing has an egg-or-chicken problem — the package must exist before a
+trusted publisher can be attached. Tegami solves it with `npm pretrust`, which publishes
+a throwaway placeholder and configures trusted publishing for `release.yml` in one shot.
+Run this **once**, locally:
+
+```bash
+npm login                          # a recent npm (>= 11.5.1) is required
+bun run release                    # add a changelog entry (e.g. "Initial release")
+bun scripts/tegami.ts version      # write the publish lock the next steps read
+bun scripts/tegami.ts npm pretrust # publish placeholder + configure trusted publishing
+```
+
+After that, CI publishes real versions via OIDC — no npmjs.com UI, no manual publishes.
+You can then drop the local version bump (`git checkout .`) and let the normal
+Version Packages PR flow cut the first real release.
+
 ## Code style
 
 Formatting and linting are handled by [Biome](https://biomejs.dev):
