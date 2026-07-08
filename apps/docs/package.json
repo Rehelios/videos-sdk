@@ -5,10 +5,11 @@
   "sideEffects": false,
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build; test -f .output/public/index.html",
-    "deploy": "bunx wrangler pages deploy .output/public --project-name videos-sdk --branch main",
+    "build": "vite build",
+    "deploy": "vite build && bunx wrangler deploy",
     "start": "vite preview",
     "preview": "vite preview",
+    "cf-typegen": "bunx wrangler types",
     "types:check": "fumadocs-mdx && tsc --noEmit",
     "typecheck": "fumadocs-mdx && tsc --noEmit",
     "postinstall": "fumadocs-mdx",
@@ -31,6 +32,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.2",
+    "@cloudflare/vite-plugin": "^1.43.2",
     "@tailwindcss/vite": "^4.3.2",
     "@types/mdx": "^2.0.14",
     "@types/node": "^26.1.0",
@@ -40,6 +42,7 @@
     "nitro": "3.0.260610-beta",
     "tailwindcss": "^4.3.2",
     "typescript": "^6.0.3",
-    "vite": "^8.1.3"
+    "vite": "^8.1.3",
+    "wrangler": "^4.108.0"
   }
 }
