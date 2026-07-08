@@ -33,7 +33,7 @@ jobs:
       - name: Build release preview
         run: bun scripts/tegami.ts pr preview --artifact preview.md
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-preview
           path: preview.md
