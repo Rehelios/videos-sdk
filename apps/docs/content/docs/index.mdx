@@ -1,0 +1,51 @@
+---
+title: Getting Started
+description: One type-safe API for video across rehelios, Mux, Bunny Stream, and Cloudflare Stream.
+icon: Rocket
+---
+
+Videos SDK gives you one small, honest API over multiple video providers. Swap the
+adapter, keep every call site — and let the compiler catch what a provider can't do.
+
+## Install
+
+```bash
+bun add videos-sdk
+```
+
+## Your first call
+
+```ts
+import { createVideos } from 'videos-sdk';
+import { rehelios } from 'videos-sdk/rehelios';
+
+const videos = createVideos({
+  adapter: rehelios({ apiKey: process.env.REHELIOS_API_KEY! }),
+});
+
+const asset = await videos.upload('intro.mp4', file);
+const { hls } = await videos.playback(asset.id);
+```
+
+## Switch providers
+
+The only thing that changes is the adapter import and its config:
+
+```ts
+import { mux } from 'videos-sdk/mux';
+
+const videos = createVideos({ adapter: mux({ tokenId, tokenSecret }) });
+```
+
+## Capability-safe by types
+
+Each adapter declares its capabilities as literal types, so unsupported operations
+are compile errors — not runtime surprises:
+
+```ts
+const m = createVideos({ adapter: mux(cfg) });
+(await m.playback(id)).dash; // ❌ Mux has no DASH
+
+const cf = createVideos({ adapter: cloudflare(cfg) });
+(await cf.playback(id)).dash; // ✅ string
+```

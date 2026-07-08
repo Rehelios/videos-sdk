@@ -1,0 +1,28 @@
+{
+  "name": "videos-sdk",
+  "version": "0.0.0",
+  "description": "Agnostic, type-safe video SDK. One API across rehelios, Mux, Bunny Stream, and Cloudflare Stream.",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "files": ["dist"],
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./rehelios": { "types": "./dist/rehelios.d.ts", "import": "./dist/rehelios.js" },
+    "./mux": { "types": "./dist/mux.d.ts", "import": "./dist/mux.js" },
+    "./bunny": { "types": "./dist/bunny.d.ts", "import": "./dist/bunny.js" },
+    "./cloudflare": { "types": "./dist/cloudflare.d.ts", "import": "./dist/cloudflare.js" }
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "clean": "rm -rf dist"
+  },
+  "peerDependencies": { "@mux/mux-node": "*" },
+  "peerDependenciesMeta": { "@mux/mux-node": { "optional": true } },
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2"
+  }
+}

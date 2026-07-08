@@ -1,0 +1,19 @@
+{
+  "name": "videos-sdk-workspace",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "build": "bun run --filter videos-sdk build",
+    "typecheck": "bun run --filter '*' typecheck",
+    "test": "bun run --filter videos-sdk test",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "release": "bun scripts/tegami.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "tegami": "^1.2.4",
+    "typescript": "^5.7.2"
+  }
+}
