@@ -30,7 +30,7 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: release-preview
           run-id: ${{ github.event.workflow_run.id }}
