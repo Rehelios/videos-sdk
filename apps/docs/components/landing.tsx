@@ -183,7 +183,7 @@ function Hero() {
     <section className="flex flex-col items-center px-4 pt-24 pb-16 text-center">
       <Link href="/docs" className="mb-8 inline-flex items-center gap-2 rounded-full border border-fd-border px-3 py-1 font-mono text-fd-muted-foreground text-xs">
         <span className="size-1.5 rounded-full bg-fd-primary" />
-        v0.0.0 — early preview →
+        v0.1.0 — early preview →
       </Link>
       <h1 className="max-w-4xl text-balance font-semibold text-6xl leading-[0.95] tracking-tight sm:text-7xl">
         Upload once.
