@@ -24,6 +24,9 @@ jobs:
           bun-version: latest
       - run: bun install --frozen-lockfile
       - run: bun run lint
+      # `build` MUST precede `typecheck`: apps/docs and apps/demo-worker import
+      # `videos-sdk`, whose exports map resolves to packages/videos-sdk/dist/*.d.ts.
+      # On a clean checkout that directory doesn't exist until the SDK is built.
       - run: bun run build
       - run: bun run typecheck
       - run: bun run --filter videos-sdk test
