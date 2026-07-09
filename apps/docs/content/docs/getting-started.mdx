@@ -42,8 +42,8 @@ yarn add videos-sdk
 </Tab>
 </Tabs>
 
-The core package has no provider dependencies. Mux ships its native client as an optional
-peer dependency (`@mux/mux-node`); the other adapters use `fetch`.
+The package has zero runtime dependencies. Every adapter talks to its provider over `fetch`,
+and signed playback uses WebCrypto — nothing else to install.
 
 </Step>
 
