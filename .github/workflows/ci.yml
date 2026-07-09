@@ -16,7 +16,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false # read-only job, never pushes
       - uses: oven-sh/setup-bun@v2
@@ -24,6 +24,6 @@ jobs:
           bun-version: latest
       - run: bun install --frozen-lockfile
       - run: bun run lint
+      - run: bun run build
       - run: bun run typecheck
       - run: bun run --filter videos-sdk test
-      - run: bun run build

@@ -1,8 +1,8 @@
-export { createVideos } from "./facade";
-export type { CreateVideosOptions, PlaybackOf, Videos } from "./facade";
 export type { VideoAdapter } from "./adapter";
-export { unsupportedOperation, VideoError } from "./errors";
 export type { VideoErrorCode, VideoErrorOptions } from "./errors";
+export { unsupportedOperation, VideoError } from "./errors";
+export type { CreateVideosOptions, PlaybackOf, Videos } from "./facade";
+export { createVideos } from "./facade";
 export type {
   AddCaptionInput,
   Asset,

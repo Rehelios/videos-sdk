@@ -32,13 +32,30 @@
     "access": "public"
   },
   "sideEffects": false,
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./rehelios": { "types": "./dist/rehelios.d.ts", "import": "./dist/rehelios.js" },
-    "./mux": { "types": "./dist/mux.d.ts", "import": "./dist/mux.js" },
-    "./bunny": { "types": "./dist/bunny.d.ts", "import": "./dist/bunny.js" },
-    "./cloudflare": { "types": "./dist/cloudflare.d.ts", "import": "./dist/cloudflare.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./rehelios": {
+      "types": "./dist/rehelios.d.ts",
+      "import": "./dist/rehelios.js"
+    },
+    "./mux": {
+      "types": "./dist/mux.d.ts",
+      "import": "./dist/mux.js"
+    },
+    "./bunny": {
+      "types": "./dist/bunny.d.ts",
+      "import": "./dist/bunny.js"
+    },
+    "./cloudflare": {
+      "types": "./dist/cloudflare.d.ts",
+      "import": "./dist/cloudflare.js"
+    }
   },
   "scripts": {
     "build": "tsup",
@@ -47,10 +64,8 @@
     "clean": "rm -rf dist",
     "prepublishOnly": "bun run build"
   },
-  "peerDependencies": { "@mux/mux-node": "*" },
-  "peerDependenciesMeta": { "@mux/mux-node": { "optional": true } },
   "devDependencies": {
-    "tsup": "^8.3.5",
-    "typescript": "^5.7.2"
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3"
   }
 }
