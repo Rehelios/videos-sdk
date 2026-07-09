@@ -4,7 +4,6 @@ import { DynamicCodeBlock } from 'fumadocs-ui/components/dynamic-codeblock';
 import { Check, Copy, Lock, Play } from 'lucide-react';
 import Link from 'next/link';
 import { type ReactNode, useState } from 'react';
-import { VideoDemo } from '@/components/video-demo';
 
 const PROVIDERS = [
   { id: 'rehelios', label: 'Rehelios', factory: 'rehelios({ apiKey: process.env.REHELIOS_API_KEY! })' },
@@ -350,9 +349,6 @@ export function Landing() {
   return (
     <main className="flex-1">
       <Hero />
-      <section className="mx-auto w-full max-w-xl px-4 pb-10">
-        <VideoDemo />
-      </section>
       <ProvidersShowcase />
       <Features />
       <CapabilitiesMatrix />

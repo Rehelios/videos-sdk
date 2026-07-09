@@ -17,7 +17,7 @@ See CONTRIBUTING.md for the full workflow.
 ## Checklist
 
 - [ ] `bun run lint` passes
-- [ ] `bun run build` passes (must run before typecheck)
+- [ ] `bun run build` passes
 - [ ] `bun run typecheck` passes
 - [ ] `bun run test` passes
 - [ ] Added a changelog entry with `bun run release` (or this change has no user

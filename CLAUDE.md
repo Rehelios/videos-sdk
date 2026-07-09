@@ -130,8 +130,7 @@ for looking generic. Don't re-litigate — Fumadocs/Next static is the answer.)
 - **Logo**: lucide `TvMinimalPlay`, monochrome (`components/logo.tsx`); favicon is a
   transparent, theme-aware SVG (`app/icon.svg`).
 - **Landing**: `components/landing.tsx` (a client component) — hero, provider tabs, feature
-  blocks with visual demos, capability matrix. `components/video-demo.tsx` is a
-  browser-only upload demo (no backend).
+  blocks with visual demos, capability matrix.
 - **Docs content**: `content/docs/*.mdx` + `meta.json` (sidebar order + lucide icons). The
   docs page uses the clerk (threaded) TOC. Brand is **"Rehelios"** capitalized in prose/UI;
   code identifiers stay lowercase (`videos-sdk/rehelios`, `rehelios({...})`).

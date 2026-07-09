@@ -29,19 +29,14 @@ tooling and examples.
 | Lint      | `bun run lint`      |
 | Format    | `bun run format`    |
 
-Before opening a PR, run — **in this order**, which is what CI does:
+Before opening a PR, run the same checks CI does:
 
 ```bash
 bun run lint
-bun run build      # must come before typecheck (see below)
+bun run build
 bun run typecheck
 bun run test
 ```
-
-`build` has to run first: `apps/docs` and `apps/demo-worker` import `videos-sdk`,
-whose `exports` map resolves to `packages/videos-sdk/dist/*.d.ts`. On a fresh clone
-that directory doesn't exist until the SDK is built, so `typecheck` would fail with
-`Cannot find module 'videos-sdk'`.
 
 ## Making a change
 
