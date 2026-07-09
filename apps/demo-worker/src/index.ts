@@ -1,4 +1,4 @@
-import { createVideos } from "videos-sdk";
+import { type Asset, createVideos } from "videos-sdk";
 import { rehelios } from "videos-sdk/rehelios";
 
 export interface Env {
@@ -19,6 +19,7 @@ const DEFAULT_MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 const DEMO_TTL_MS = 10 * 60 * 1000;
 const MAX_TITLE_LENGTH = 120;
 const CLEANUP_PAGE_SIZE = 100;
+const UPSTREAM_TIMEOUT_MS = 30_000;
 
 const ROUTES = [
   { method: "POST", pattern: /^\/v1\/videos$/, kind: "create" },
@@ -45,7 +46,7 @@ function corsHeaders(origin: string | null, env: Env): Record<string, string> {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, x-api-key",
-    "Vary": "Origin",
+    Vary: "Origin",
   };
 }
 
@@ -69,9 +70,17 @@ async function readJson(request: Request): Promise<Record<string, unknown>> {
   }
 }
 
+function field(body: Record<string, unknown>, key: string): unknown {
+  return body[key];
+}
+
+function stringField(body: Record<string, unknown>, key: string, fallback: string): string {
+  const value = field(body, key);
+  return typeof value === "string" ? value : fallback;
+}
+
 function demoTitle(body: Record<string, unknown>): string {
-  const title = typeof body["title"] === "string" ? body["title"] : "demo";
-  return title.slice(0, MAX_TITLE_LENGTH) || "demo";
+  return stringField(body, "title", "demo").slice(0, MAX_TITLE_LENGTH) || "demo";
 }
 
 function maxUploadBytes(env: Env): number {
@@ -92,23 +101,26 @@ type UploadInitResult =
   | { readonly ok: false; readonly error: string };
 
 function uploadInitBody(body: Record<string, unknown>, env: Env): UploadInitResult {
-  const size = Number(body["size"]);
+  const size = Number(field(body, "size"));
   if (!Number.isFinite(size) || size <= 0) {
     return { ok: false, error: "A positive size is required." };
   }
   if (size > maxUploadBytes(env)) {
     return { ok: false, error: `The demo accepts files up to ${maxUploadBytes(env)} bytes.` };
   }
-  const contentType = typeof body["contentType"] === "string" ? body["contentType"] : "";
+  const contentType = stringField(body, "contentType", "");
   if (!contentType.startsWith("video/")) {
     return { ok: false, error: "Only video/* uploads are allowed." };
   }
-  const filename = typeof body["filename"] === "string" ? body["filename"] : "demo";
+  const filename = stringField(body, "filename", "demo");
   return { ok: true, body: { filename: filename.slice(0, MAX_TITLE_LENGTH), contentType, size } };
 }
 
 async function rateLimited(request: Request, env: Env): Promise<boolean> {
-  if (env.DEMO_RATE_LIMIT === undefined) return false;
+  if (env.DEMO_RATE_LIMIT === undefined) {
+    console.warn("DEMO_RATE_LIMIT binding is not configured; requests are unthrottled.");
+    return false;
+  }
   const ip = request.headers.get("cf-connecting-ip") ?? "anon";
   const { success } = await env.DEMO_RATE_LIMIT.limit({ key: ip });
   return !success;
@@ -146,14 +158,25 @@ async function proxy(
     body = await request.text();
   }
 
-  const upstream = await fetch(upstreamUrl, {
-    method: request.method,
-    headers: {
-      "x-api-key": env.REHELIOS_API_KEY,
-      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-    },
-    ...(body !== undefined ? { body } : {}),
-  });
+  let upstream: Response;
+  try {
+    upstream = await fetch(upstreamUrl, {
+      method: request.method,
+      headers: {
+        "x-api-key": env.REHELIOS_API_KEY,
+        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      },
+      ...(body !== undefined ? { body } : {}),
+      // Without a deadline a hanging upstream ties up the Worker for its whole
+      // wall-clock budget, degrading this public demo for every concurrent user.
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    });
+  } catch (cause) {
+    if (cause instanceof DOMException && cause.name === "TimeoutError") {
+      return fail("The upstream request timed out.", 504, cors);
+    }
+    throw cause;
+  }
 
   const response = new Response(upstream.body, {
     status: upstream.status,
@@ -163,12 +186,25 @@ async function proxy(
   return response;
 }
 
+function belongsToDemoCollection(asset: Asset, collectionId: string): boolean {
+  const raw = asset.raw as { collectionId?: unknown };
+  return raw.collectionId === collectionId;
+}
+
 async function cleanup(env: Env): Promise<void> {
+  const collectionId = env.DEMO_COLLECTION_ID;
+  if (collectionId === undefined || collectionId === "") {
+    throw new Error("DEMO_COLLECTION_ID is required: refusing to sweep the whole org.");
+  }
+
   const videos = demoVideos(env);
   const assets = await videos.list({ limit: CLEANUP_PAGE_SIZE });
   const cutoff = Date.now() - DEMO_TTL_MS;
   const expired = assets.filter(
-    (asset) => asset.createdAt !== undefined && asset.createdAt.getTime() < cutoff,
+    (asset) =>
+      belongsToDemoCollection(asset, collectionId) &&
+      asset.createdAt !== undefined &&
+      asset.createdAt.getTime() < cutoff,
   );
   await Promise.allSettled(expired.map((asset) => videos.delete(asset.id)));
 }

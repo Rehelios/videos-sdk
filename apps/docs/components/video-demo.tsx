@@ -177,7 +177,12 @@ export function VideoDemo() {
 
       setAssetId(asset.id);
       setExpiresAt(stored.expiresAt);
-      setPhase(asset.status === 'ready' ? 'ready' : 'processing');
+      if (asset.status === 'errored') {
+        setError('The upload failed to process.');
+        setPhase('errored');
+      } else {
+        setPhase(asset.status === 'ready' ? 'ready' : 'processing');
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The upload failed.');
       setPhase('errored');

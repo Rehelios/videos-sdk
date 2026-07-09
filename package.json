@@ -10,8 +10,8 @@
     "build": "bun run --filter videos-sdk build",
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun run --filter videos-sdk test",
-    "lint": "biome check packages scripts",
-    "format": "biome format --write packages scripts",
+    "lint": "biome check packages scripts apps/demo-worker",
+    "format": "biome format --write packages scripts apps/demo-worker",
     "release": "bun scripts/tegami.ts",
     "release:ci": "bun scripts/tegami.ts ci"
   },
