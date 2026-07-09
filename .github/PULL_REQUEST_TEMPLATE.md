@@ -17,9 +17,9 @@ See CONTRIBUTING.md for the full workflow.
 ## Checklist
 
 - [ ] `bun run lint` passes
+- [ ] `bun run build` passes (must run before typecheck)
 - [ ] `bun run typecheck` passes
 - [ ] `bun run test` passes
-- [ ] `bun run build` passes
 - [ ] Added a changelog entry with `bun run release` (or this change has no user
       impact)
 - [ ] Updated docs / README if behavior or the API changed
