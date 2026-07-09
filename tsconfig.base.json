@@ -1,6 +1,10 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
+    // tsup's dts pipeline hardcodes `baseUrl: compilerOptions.baseUrl || "."`,
+    // which TS 6 reports as deprecated (TS5101). We can't remove it from our
+    // side, so silence it. Drop this once tsup stops injecting baseUrl.
+    "ignoreDeprecations": "6.0",
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",

@@ -1,7 +1,7 @@
 import { docs } from 'collections/server';
 import { loader } from 'fumadocs-core/source';
 import { lucideIconsPlugin } from 'fumadocs-core/source/lucide-icons';
-import { docsContentRoute, docsImageRoute, docsRoute } from './shared';
+import { docsContentRoute, docsImageRoute, docsRoute, siteUrl } from './shared';
 
 // See https://fumadocs.dev/docs/headless/source-api for more info
 export const source = loader({
@@ -28,10 +28,19 @@ export function getPageMarkdownUrl(page: (typeof source)['$inferPage']) {
   };
 }
 
+export function absoluteLinks(markdown: string) {
+  return markdown.replaceAll('](/', `](${siteUrl}/`);
+}
+
 export async function getLLMText(page: (typeof source)['$inferPage']) {
   const processed = await page.data.getText('processed');
+  const body = absoluteLinks(processed).replace(/\n{3,}/g, '\n\n').trim();
 
-  return `# ${page.data.title} (${page.url})
+  const header = [
+    `# ${page.data.title}`,
+    page.data.description ? `> ${page.data.description}` : undefined,
+    `Source: ${siteUrl}${page.url}`,
+  ].filter((line) => line !== undefined);
 
-${processed}`;
+  return `${header.join('\n\n')}\n\n${body}\n`;
 }

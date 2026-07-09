@@ -40,19 +40,20 @@ interface VideosCore<C extends Capabilities> {
   thumbnail(id: string, ...args: ThumbnailArgs<C>): string;
 }
 
-export type Videos<A extends VideoAdapter> = A extends VideoAdapter<infer C>
-  ? VideosCore<C> &
-      Gate<
-        C["signedPlayback"],
-        { signedPlayback(id: string, options: SignedPlaybackOptions): Promise<string> }
-      > &
-      Gate<
-        C["ingestFromUrl"],
-        { ingestFromUrl(url: string, options?: IngestOptions): Promise<Asset> }
-      > &
-      Gate<C["captions"], { readonly captions: CaptionOps }> &
-      Gate<C["webhooks"], { readonly webhooks: WebhookOps }>
-  : never;
+export type Videos<A extends VideoAdapter> =
+  A extends VideoAdapter<infer C>
+    ? VideosCore<C> &
+        Gate<
+          C["signedPlayback"],
+          { signedPlayback(id: string, options: SignedPlaybackOptions): Promise<string> }
+        > &
+        Gate<
+          C["ingestFromUrl"],
+          { ingestFromUrl(url: string, options?: IngestOptions): Promise<Asset> }
+        > &
+        Gate<C["captions"], { readonly captions: CaptionOps }> &
+        Gate<C["webhooks"], { readonly webhooks: WebhookOps }>
+    : never;
 
 interface VideosFull {
   readonly adapter: VideoAdapter;

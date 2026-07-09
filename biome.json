@@ -1,25 +1,26 @@
 {
-  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.3/schema.json",
   "files": {
-    "ignore": [
-      "**/dist/**",
-      "**/node_modules/**",
-      "**/.next/**",
-      "**/.source/**",
-      "**/.astro/**",
-      "**/.wrangler/**",
-      "**/build/**",
-      "**/out/**",
-      "**/coverage/**",
-      "apps/docs/**",
-      "**/*.gen.ts",
-      "**/routeTree.gen.ts"
+    "includes": [
+      "**",
+      "!**/dist/**",
+      "!**/node_modules/**",
+      "!**/.next/**",
+      "!**/.source/**",
+      "!**/.astro/**",
+      "!**/.wrangler/**",
+      "!**/build/**",
+      "!**/out/**",
+      "!**/coverage/**",
+      "!**/apps/docs/**",
+      "!**/*.gen.ts",
+      "!**/routeTree.gen.ts"
     ]
   },
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "suspicious": { "noExplicitAny": "error" }
     }
   },
