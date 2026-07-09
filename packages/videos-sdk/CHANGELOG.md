@@ -1,7 +1,4 @@
----
-packages:
-  "videos-sdk": patch
----
+## videos-sdk@0.1.1
 
 ### Ship package metadata to npm
 
