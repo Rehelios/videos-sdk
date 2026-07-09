@@ -13,6 +13,14 @@ updates:
     groups:
       bun:
         patterns: ["*"]
+    ignore:
+      # tsup builds .d.ts with rollup-plugin-dts, which reads the internal
+      # `useCaseSensitiveFileNames` API that TypeScript 7 removed. Taking TS 7
+      # breaks the type output — the whole point of this SDK. Without this,
+      # every weekly grouped PR would pull TS 7 in and fail CI.
+      # Remove this once tsup supports TypeScript 7.
+      - dependency-name: "typescript"
+        versions: [">=7"]
     labels: [dependencies]
     commit-message:
       prefix: chore
