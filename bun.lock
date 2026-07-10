@@ -42,7 +42,7 @@
     },
     "packages/videos-sdk": {
       "name": "videos-sdk",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "devDependencies": {
         "tsup": "^8.5.1",
         "typescript": "^6.0.3",

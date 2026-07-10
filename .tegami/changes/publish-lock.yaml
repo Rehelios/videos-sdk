@@ -1,0 +1,17 @@
+core:changelogs:
+  - content: "---\npackages:\n  videos-sdk:\n    type: patch\n---\n\n### Ship package metadata to npm\n\n`repository`, `homepage`, `bugs` and keywords were added to the manifest but never\nreached the registry — 0.1.0 was published before they existed. The npm page now\nlinks back to the source, and the package is discoverable by keyword.\n\n### Build with TypeScript 6\n\nThe published bundle is now produced by TypeScript 6.0.3. `dist` no longer ships\n`.js.map` files: the maps referenced sources under `src/`, which `files: [\"dist\"]`\nnever published, so they pointed at nothing.\n"
+    filename: 2026-07-09-metadata.md
+    v: 0.0.0
+core:packages:
+  - id: npm:videos-sdk-workspace
+    updated: false
+  - changelogIds:
+      - 2026-07-09-metadata.md
+    id: npm:videos-sdk
+    updated: true
+  - id: npm:docs
+    updated: false
+npm:packages:
+  - id: npm:videos-sdk-workspace
+  - id: npm:videos-sdk
+  - id: npm:docs

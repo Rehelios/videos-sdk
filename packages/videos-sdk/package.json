@@ -1,6 +1,6 @@
 {
   "name": "videos-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Agnostic, type-safe video SDK. One API across rehelios, Mux, Bunny Stream, and Cloudflare Stream.",
   "type": "module",
   "license": "MIT",
