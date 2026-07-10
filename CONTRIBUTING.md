@@ -42,61 +42,63 @@ bun run test
 
 1. Fork the repo and create a branch off `main` (e.g. `feat/signed-urls`).
 2. Make your change, with tests where it makes sense.
-3. **Add a changelog entry** (see below) — this is how your change gets released.
-4. Open a pull request. A bot will comment a **release preview** showing what your
-   change will publish.
+3. Open a pull request, and **title it as a conventional commit** (see below).
+4. [CodeRabbit](https://coderabbit.ai) reviews it automatically. Once it's approved and
+   CI is green, a maintainer merges.
 
-## Changelog entries (how releases are versioned)
+That's the whole contract. There's no changelog file to write and no release PR to
+chase — the release notes come from your PR title and description.
 
-We use [Tegami](https://tegami.fuma-nama.dev) — a Changesets-style tool — to manage
-versioning and publishing. Every user-facing change should ship with a changelog
-entry so the version bump and release notes are generated automatically.
+## Your PR title is the release
 
-Add one interactively:
+We squash-merge, so **the PR title becomes the commit on `main`**, and that commit is
+what decides whether a release happens and how big it is:
 
-```bash
-bun run release
-```
+| PR title                             | Result                        |
+| ------------------------------------ | ----------------------------- |
+| `fix(videos-sdk): ...`               | patch release (`0.1.1` → `0.1.2`) |
+| `feat(videos-sdk): ...`              | minor release (`0.1.1` → `0.2.0`) |
+| `feat(videos-sdk)!: ...`             | major release (`0.1.1` → `1.0.0`) |
+| `chore: ...`, `docs: ...`, `ci: ...` | no release                    |
 
-Pick the package (`videos-sdk`), choose the bump type, and write the note:
+Two rules:
 
-- **patch** — bug fixes, docs, internal changes with no API impact
-- **minor** — new, backwards-compatible features (new adapter, new capability)
-- **major** — breaking API changes
+- **Scope it `videos-sdk`** when the published package changes. An unscoped `fix: ...`,
+  or a different scope like `fix(ci): ...`, publishes nothing.
+- **Write a real PR description.** The squashed commit body becomes the `CHANGELOG.md`
+  entry and the GitHub Release notes, so write it for a user of the SDK — what changed
+  and why it matters, not how you implemented it.
 
-This creates a small Markdown file under `.tegami/changes/`. **Commit it with your
-PR.** If a change is purely internal (CI, tests, refactor with no user impact) you can
-skip the entry.
-
-> AI agents: see [`AGENTS.md`](./AGENTS.md) for the exact changelog file format.
+Only `feat`, `fix`, `perf` and `revert` (plus anything marked breaking with `!` or a
+`BREAKING CHANGE:` footer) trigger a release. Everything else is a no-op.
 
 ## How a release ships
 
-You don't cut releases by hand:
+Merging to `main` runs [`release.yml`](.github/workflows/release.yml), which does the
+whole thing in one job: it reads the conventional commits since the last tag, bumps the
+version, writes `CHANGELOG.md`, commits that back to `main`, publishes to npm with
+[provenance](https://docs.npmjs.com/generating-provenance-statements) via OIDC trusted
+publishing, and creates the git tag and GitHub Release.
 
-1. When your PR merges to `main`, Tegami opens (or updates) a **"Version Packages"**
-   PR that bumps versions and updates `CHANGELOG.md` from the pending entries.
-2. When a maintainer merges that PR, the package is published to npm (via OIDC
-   trusted publishing, with provenance) and a matching **GitHub Release + tag** is
-   created automatically.
+If no commit since the last tag was releasable, the job stops early and nothing ships.
+Nobody cuts releases by hand, and there is no version PR to merge.
 
 ## Maintainers: first-time npm setup
 
-npm trusted publishing has an egg-or-chicken problem — the package must exist before a
-trusted publisher can be attached. Tegami solves it with `npm pretrust`, which publishes
-a throwaway placeholder and configures trusted publishing for `release.yml` in one shot.
-Run this **once**, locally:
+Already done for `videos-sdk` — kept here for reference.
+
+npm trusted publishing has an egg-or-chicken problem: the package must exist before a
+trusted publisher can be attached. [Tegami](https://tegami.fuma-nama.dev) solves it with
+`npm pretrust`, which publishes a throwaway placeholder and configures trusted publishing
+for `release.yml` in one shot. Run it **once**, locally:
 
 ```bash
 npm login                          # a recent npm (>= 11.5.1) is required
-bun run release                    # add a changelog entry (e.g. "Initial release")
-bun scripts/tegami.ts version      # write the publish lock the next steps read
 bun scripts/tegami.ts npm pretrust # publish placeholder + configure trusted publishing
 ```
 
-After that, CI publishes real versions via OIDC — no npmjs.com UI, no manual publishes.
-You can then drop the local version bump (`git checkout .`) and let the normal
-Version Packages PR flow cut the first real release.
+Trusted publishing is bound to the **workflow filename**. Renaming `release.yml` breaks
+publishing until it's reconfigured on npmjs.com.
 
 ## Code style
 

@@ -48,12 +48,9 @@ reviews:
       instructions: >-
         Verify least-privilege `permissions`, that `id-token: write` is only present
         where OIDC publishing needs it, and that no secret leaks into logs. The
-        release flow is Tegami-driven — flag changes that could publish
-        unintentionally.
-    - path: ".tegami/changes/**"
-      instructions: >-
-        These are changelog entries. Do not review them for code; only check the
-        frontmatter is valid and the note is user-facing.
+        release flow is Tegami-driven and publishes on merge to main — flag changes
+        that could publish unintentionally, skip the version bump commit, or leave
+        bun.lock out of it.
 
   tools:
     biome:
