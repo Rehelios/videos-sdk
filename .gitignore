@@ -17,3 +17,8 @@ next-env.d.ts
 yarn.lock
 package-lock.json
 pnpm-lock.yaml
+
+# Tegami drafts changelog entries and the publish lock inside a single release run.
+# Committing them is what let a half-finished release wedge the next one.
+.tegami/changes/*
+!.tegami/changes/.gitkeep

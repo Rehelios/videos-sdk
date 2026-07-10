@@ -138,15 +138,36 @@ for looking generic. Don't re-litigate — Fumadocs/Next static is the answer.)
 
 ## Publishing & CI
 
-- **CI** (`.github/workflows/ci.yml`): on push/PR — `bun install --frozen-lockfile`,
-  `bun run typecheck` (both packages), SDK test, SDK build.
-- **Release** (`.github/workflows/release.yml`): on a **published GitHub Release**, publishes
-  `packages/videos-sdk` to npm via **OIDC trusted publishing** (no tokens; `id-token: write`,
-  npm ≥ 11.5.1, automatic provenance). Requires a Trusted Publisher configured on
-  npmjs.com (videos-sdk → Settings → Trusted Publisher → GitHub Actions, workflow
-  `release.yml`). npm's limitation: trusted publishing can't do the *first* publish of a new
-  package — v0.1.0 was published once with a granular token to bootstrap it.
-- **To cut a release**: bump `packages/videos-sdk/package.json` version → commit →
-  `gh release create vX.Y.Z --title "vX.Y.Z" --notes "..."`. The workflow does the rest.
-- `scripts/tegami.ts` (Tegami) is wired but optional — the release path is the plain
-  OIDC `npm publish` above.
+Exactly **two workflows**. Keep it that way.
+
+- **CI** (`.github/workflows/ci.yml`): on push/PR — `bun install --frozen-lockfile`, lint,
+  build, typecheck (both packages), SDK test. Read-only, no credentials.
+- **Release** (`.github/workflows/release.yml`): on **push to `main`**, one job does
+  everything. Tegami (`scripts/tegami.ts`) drafts changelog entries from the conventional
+  commits since the last tag, bumps the version, writes `CHANGELOG.md`, we commit that back
+  to `main`, then Tegami publishes to npm via **OIDC trusted publishing** (`id-token: write`,
+  npm ≥ 11.5.1, automatic provenance) and creates the tag + GitHub Release.
+
+**The release contract is the commit subject.** PRs are squash-merged, so the PR title *is*
+the commit. `feat(videos-sdk):` → minor, `fix|perf|revert(videos-sdk):` → patch, `!` or a
+`BREAKING CHANGE:` footer → major. Everything else (`chore:`, `docs:`, `ci:`) releases
+nothing — and so does a **wrong scope**: `fix(ci):` or an unscoped `fix:` resolves to no
+workspace package and is silently dropped. That silence is the sharpest edge here.
+
+Non-obvious constraints, all learned the hard way:
+
+- **`versionPr: false`** on the github plugin is what removes the old "Version Packages" PR.
+  Without it Tegami's `ci` command versions on one run and publishes on the *next*, which is
+  why releases used to take two merges.
+- **Never `git add` only the package files.** `tegami version` also rewrites the workspace
+  version inside `bun.lock`; leaving it out breaks the next `--frozen-lockfile` install.
+- **`.tegami/changes/` is gitignored.** The drafted entries and `publish-lock.yaml` must
+  never be committed — a committed pending lock makes the next `version` refuse to bump
+  ("Publish lock is still pending"), which is exactly how `main` got wedged at 0.1.1.
+- **Configure npm via `tegami({ npm })`, not `plugins: [npm(...)]`** — Tegami already
+  prepends the npm provider, and registering it twice double-bumps every version.
+- **Trusted publishing is bound to the workflow filename.** Renaming `release.yml` breaks
+  publishing until it's reconfigured on npmjs.com. npm can't do the *first* publish of a new
+  package this way; v0.1.0 was bootstrapped with `tegami npm pretrust`.
+- The release commit is pushed with the default `GITHUB_TOKEN`, and GitHub doesn't trigger
+  workflows on `GITHUB_TOKEN` pushes — that's what stops the loop. No `RELEASE_TOKEN` needed.

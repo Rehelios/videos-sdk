@@ -1,58 +1,48 @@
 name: Release
 
-# Changesets-style release flow, driven by Tegami (scripts/tegami.ts).
+# One push to main, one release. No intermediate "Version Packages" PR.
 #
-# On every push to main:
-#   - If there are pending changelog entries under .tegami/changes/, Tegami opens
-#     (or updates) a "Version Packages" PR that bumps versions, writes CHANGELOG.md
-#     and the publish lock. Nothing is published on this run.
-#   - Once that PR is merged, the next push to main has no pending entries, so Tegami
-#     publishes packages/videos-sdk to npm (OIDC trusted publishing, with provenance)
-#     and creates the matching GitHub Release + tag automatically.
+#   1. Tegami reads the conventional commits since the last tag and drafts changelog
+#      entries from them. Only `feat` (minor), `fix`/`perf`/`revert` (patch) and
+#      breaking changes count, and only when scoped to a workspace package:
+#      `fix(videos-sdk): ...`. A `chore:`, `docs:` or `ci:` commit drafts nothing.
+#   2. If nothing was drafted, the job stops. No commit, no tag, no publish.
+#   3. Otherwise Tegami bumps the version and writes CHANGELOG.md; we commit that to
+#      main; then Tegami publishes to npm (OIDC trusted publishing, with provenance)
+#      and creates the git tag + GitHub Release.
 #
-# Contributors never cut releases by hand: they add a changelog entry with
-# `bun run release` in their PR (see CONTRIBUTING.md), and merging the Version
-# Packages PR ships it.
+# The publish lock is gitignored, so it never outlives the runner and a half-finished
+# run can't wedge the next one.
 #
-# One-time bootstrap (solves npm's egg-or-chicken: the package must exist before
-# a trusted publisher can be configured). Run locally, once:
-#   npm login
-#   bun run release                 # add a changelog entry
-#   bun scripts/tegami.ts version   # write the publish lock
-#   bun scripts/tegami.ts npm pretrust
-# `pretrust` publishes a placeholder and configures npm trusted publishing for
-# this workflow automatically — no npmjs.com UI needed. See CONTRIBUTING.md.
+# The release commit is pushed with GITHUB_TOKEN, and GitHub does not trigger workflows
+# on GITHUB_TOKEN pushes — so this cannot loop. (Even if it did, a `chore(release):`
+# commit drafts nothing.)
 
 on:
   push:
     branches: [main]
   workflow_dispatch: {}
 
-# Serialize releases so two pushes can't publish or open the version PR at once.
+# Serialize releases so two pushes can't publish at once.
 concurrency:
   group: release
   cancel-in-progress: false
 
 permissions:
-  contents: write # push the version branch, create tags + GitHub Releases
-  pull-requests: write # open/update the "Version Packages" PR
+  contents: write # push the release commit, the tag, and the GitHub Release
   id-token: write # npm OIDC trusted publishing
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0 # Tegami resolves commits/PRs from full history
-          # Don't leave the token in .git/config: Tegami re-authenticates `origin`
-          # itself (git remote set-url with x-access-token) before pushing the
-          # version branch, so nothing here needs persisted credentials.
-          persist-credentials: false
-          # Optional: set a RELEASE_TOKEN (PAT) secret so the Version Packages PR
-          # triggers CI. With the default GITHUB_TOKEN, GitHub does not run
-          # workflows on token-authored PRs.
-          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0 # Tegami needs full history + tags to find the commit range
+          persist-credentials: false # origin is re-authenticated explicitly before pushing
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -63,20 +53,49 @@ jobs:
           node-version: 22
           registry-url: "https://registry.npmjs.org"
 
-      # Trusted publishing needs npm >= 11.5.1. Pinned rather than @latest so a
-      # bad npm release can't silently enter a job that holds an OIDC token.
+      # Trusted publishing needs npm >= 11.5.1. Pinned rather than @latest so a bad npm
+      # release can't silently enter a job that holds an OIDC token.
       - run: npm install -g npm@11.16.0
 
       - run: bun install --frozen-lockfile
 
-      # Safety gate before publishing (the Version Packages PR itself doesn't run CI).
-      # `build` runs here too: it's the tsup/dts pipeline that produces what we ship.
+      # Safety gate: `build` is the tsup/dts pipeline that produces what we ship.
       - run: bun run build
       - run: bun run typecheck
       - run: bun run --filter videos-sdk test
 
-      - name: Version PR or publish
-        run: bun scripts/tegami.ts ci
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
+      - name: Draft changelog entries from conventional commits
+        run: bun scripts/tegami.ts
+
+      - name: Apply the version bump
+        run: bun scripts/tegami.ts version
+
+      # Exits 0 when the publish lock has pending packages, 1 when there is nothing to do.
+      - name: Check whether anything needs publishing
+        id: check
+        run: |
+          if bun scripts/tegami.ts check-publish; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "No releasable commits since the last tag — nothing to publish." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Commit before publishing so Tegami's tag lands on the release commit.
+      - name: Commit the version bump
+        if: steps.check.outputs.publish == 'true'
+        run: |
+          version=$(node -p "require('./packages/videos-sdk/package.json').version")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          # `version` rewrites package.json, CHANGELOG.md *and* the workspace version in
+          # bun.lock — miss the lockfile and the next `--frozen-lockfile` install fails.
+          # Everything else it writes lives under the gitignored .tegami/changes/.
+          git add -A
+          git commit -m "chore(release): videos-sdk@${version}"
+          git push origin HEAD:main
+
+      - name: Publish to npm, tag, and create the GitHub Release
+        if: steps.check.outputs.publish == 'true'
+        run: bun scripts/tegami.ts publish

@@ -11,9 +11,7 @@
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun run --filter videos-sdk test",
     "lint": "biome check packages scripts",
-    "format": "biome format --write packages scripts",
-    "release": "bun scripts/tegami.ts",
-    "release:ci": "bun scripts/tegami.ts ci"
+    "format": "biome format --write packages scripts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.3",

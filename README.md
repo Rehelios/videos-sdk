@@ -90,18 +90,19 @@ Bun workspaces monorepo. The published package is `packages/videos-sdk`.
 
 Contributions are welcome! See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup and the
 change workflow, and [AGENTS.md](./AGENTS.md) if you're an AI agent. In short: make your
-change, run `bun run release` to add a changelog entry, and open a PR — a bot comments a
-release preview on it.
+change and open a PR titled as a conventional commit (`fix(videos-sdk): ...`). There's no
+changelog file to write.
 
 ## Releases
 
-Versioning and publishing are automated with [Tegami](https://tegami.fuma-nama.dev):
+Versioning and publishing are automated with [Tegami](https://tegami.fuma-nama.dev). The
+PR title drives it — `fix(videos-sdk):` is a patch, `feat(videos-sdk):` a minor, a `!` a
+major, and anything else (`chore:`, `docs:`, `ci:`) releases nothing.
 
-- Each PR carries a changelog entry describing its user-facing impact.
-- Merging to `main` opens a **Version Packages** PR that collects entries into a
-  version bump + `CHANGELOG.md`.
-- Merging that PR publishes to npm — with [provenance](https://docs.npmjs.com/generating-provenance-statements)
-  via OIDC trusted publishing — and creates the matching GitHub Release and tag.
+Merging to `main` bumps the version, writes `CHANGELOG.md`, publishes to npm with
+[provenance](https://docs.npmjs.com/generating-provenance-statements) via OIDC trusted
+publishing, and creates the matching GitHub Release and tag — all in one run, with no
+intermediate PR.
 
 ## License
 
