@@ -48,16 +48,17 @@ b.thumbnail(id, { time: 5 }); // ❌ TS error — Bunny thumbnails have no time 
 
 ## Capabilities matrix
 
-| Capability        | rehelios | Mux | Bunny | Cloudflare |
-| ----------------- | :------: | :-: | :---: | :--------: |
-| resumable upload  |    ✅    | ✅  |  ✅   |     ✅     |
-| ingest from URL   |    ✅    | ✅  |  ✅   |     ✅     |
-| HLS playback      |    ✅    | ✅  |  ✅   |     ✅     |
-| DASH playback     |    ✅    | ❌  |  ❌   |     ✅     |
-| signed playback   |    ✅    | ✅  |  ✅   |     ✅     |
-| thumbnail at time |    ✅    | ✅  |  ❌   |     ✅     |
-| captions          |    ✅    | ✅  |  ✅   |     ✅     |
-| webhooks          |    ✅    | ✅  |  ✅   |     ✅     |
+| Capability          | rehelios | Mux | Bunny | Cloudflare |
+| ------------------- | :------: | :-: | :---: | :--------: |
+| resumable upload    |    ✅    | ✅  |  ✅   |     ✅     |
+| ingest from URL     |    ✅    | ✅  |  ✅   |     ✅     |
+| HLS playback        |    ✅    | ✅  |  ✅   |     ✅     |
+| DASH playback       |    ✅    | ❌  |  ❌   |     ✅     |
+| signed playback     |    ✅    | ✅  |  ✅   |     ✅     |
+| thumbnail at time   |    ❌    | ✅  |  ❌   |     ✅     |
+| captions from file  |    ✅    | ❌  |  ✅   |     ✅     |
+| captions from URL   |    ❌    | ✅  |  ❌   |     ❌     |
+| webhooks (verified) |    ✅    | ✅  |  ✅   |     ✅     |
 
 ## Errors
 

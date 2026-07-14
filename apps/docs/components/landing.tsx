@@ -34,8 +34,9 @@ const CAPABILITIES = [
   { name: 'DASH playback', rehelios: true, mux: false, bunny: false, cloudflare: true },
   { name: 'Signed playback', rehelios: true, mux: true, bunny: true, cloudflare: true },
   { name: 'Thumbnail at time', rehelios: false, mux: true, bunny: false, cloudflare: true },
-  { name: 'Captions', rehelios: true, mux: true, bunny: true, cloudflare: true },
-  { name: 'Webhooks', rehelios: true, mux: true, bunny: true, cloudflare: true },
+  { name: 'Captions from file', rehelios: true, mux: false, bunny: true, cloudflare: true },
+  { name: 'Captions from URL', rehelios: false, mux: true, bunny: false, cloudflare: false },
+  { name: 'Verified webhooks', rehelios: true, mux: true, bunny: true, cloudflare: true },
 ] as const;
 
 function CodeBlock({ code, lang = 'ts' }: { code: string; lang?: string }) {

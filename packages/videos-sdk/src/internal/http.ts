@@ -10,6 +10,8 @@ export interface HttpClientOptions {
 export interface HttpClient {
   get<T>(path: string): Promise<T>;
   post<T>(path: string, body?: unknown): Promise<T>;
+  postForm<T>(path: string, form: FormData): Promise<T>;
+  putForm<T>(path: string, form: FormData): Promise<T>;
   del(path: string): Promise<void>;
 }
 
@@ -58,10 +60,28 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
       const response = await request(path, init);
       return (await response.json()) as T;
     },
+    async postForm<T>(path: string, form: FormData): Promise<T> {
+      const response = await request(path, { method: "POST", body: form });
+      return (await jsonOrEmpty(response)) as T;
+    },
+    async putForm<T>(path: string, form: FormData): Promise<T> {
+      const response = await request(path, { method: "PUT", body: form });
+      return (await jsonOrEmpty(response)) as T;
+    },
     async del(path: string): Promise<void> {
       await request(path, { method: "DELETE" });
     },
   };
+}
+
+async function jsonOrEmpty(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (text === "") return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
 }
 
 export interface PutBinaryOptions {

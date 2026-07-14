@@ -19,6 +19,18 @@ export async function muxGating(): Promise<void> {
   void videos.ingestFromUrl("https://example.com/in.mp4");
   void videos.captions.list("id");
   void videos.webhooks.verify(new Request("https://example.com/hook"));
+
+  void videos.captions.add("id", {
+    language: "en",
+    label: "English",
+    url: "https://example.com/en.vtt",
+  });
+  void videos.captions.add("id", {
+    language: "en",
+    label: "English",
+    // @ts-expect-error Mux only ingests captions from a URL, never from a file.
+    body: "WEBVTT",
+  });
 }
 
 export async function cloudflareGating(): Promise<void> {
@@ -44,6 +56,14 @@ export function bunnyGating(): void {
   use(videos.thumbnail("id"));
   // @ts-expect-error Bunny thumbnails have no time offset.
   use(videos.thumbnail("id", { time: 5 }));
+
+  void videos.captions.add("id", { language: "en", label: "English", body: "WEBVTT" });
+  void videos.captions.add("id", {
+    language: "en",
+    label: "English",
+    // @ts-expect-error Bunny uploads the caption file itself; it takes no URL.
+    url: "https://example.com/en.vtt",
+  });
 }
 
 export async function reheliosGating(): Promise<void> {

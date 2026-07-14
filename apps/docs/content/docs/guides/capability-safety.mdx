@@ -23,16 +23,29 @@ bunny.thumbnail(id, { time: 5 }); // ❌ Bunny thumbnails have no time offset
 
 ## The capability matrix
 
-| Capability        | Rehelios | Mux | Bunny | Cloudflare |
-| ----------------- | :------: | :-: | :---: | :--------: |
-| Resumable upload  |    ✓     |  ✓  |   ✓   |     ✓      |
-| Ingest from URL   |    ✓     |  ✓  |   ✓   |     ✓      |
-| HLS playback      |    ✓     |  ✓  |   ✓   |     ✓      |
-| DASH playback     |    ✓     |  —  |   —   |     ✓      |
-| Signed playback   |    ✓     |  ✓  |   ✓   |     ✓      |
-| Thumbnail at time |    —     |  ✓  |   —   |     ✓      |
-| Captions          |    ✓     |  ✓  |   ✓   |     ✓      |
-| Webhooks          |    ✓     |  ✓  |   ✓   |     ✓      |
+| Capability         | Rehelios | Mux | Bunny | Cloudflare |
+| ------------------ | :------: | :-: | :---: | :--------: |
+| Resumable upload   |    ✓     |  ✓  |   ✓   |     ✓      |
+| Ingest from URL    |    ✓     |  ✓  |   ✓   |     ✓      |
+| HLS playback       |    ✓     |  ✓  |   ✓   |     ✓      |
+| DASH playback      |    ✓     |  —  |   —   |     ✓      |
+| Signed playback    |    ✓     |  ✓  |   ✓   |     ✓      |
+| Thumbnail at time  |    —     |  ✓  |   —   |     ✓      |
+| Captions from file |    ✓     |  —  |   ✓   |     ✓      |
+| Captions from URL  |    —     |  ✓  |   —   |     —      |
+| Webhooks           |    ✓     |  ✓  |   ✓   |     ✓      |
+
+Captions are the second place a capability changes a *signature* rather than removing a
+method. Mux ingests a subtitle track by fetching a public URL; the other three take the
+file itself. So `captionSource` narrows what `captions.add` accepts:
+
+```ts
+mux.captions.add(id, { language: "en", label: "English", url: vttUrl });
+mux.captions.add(id, { language: "en", label: "English", body: file });
+//                                                        ❌ Mux takes no file
+
+bunny.captions.add(id, { language: "en", label: "English", body: file });
+```
 
 Where a provider can't do something, the SDK says so. If you reach for it through a cast
 anyway, it throws a `VideoError` with code `unsupported_operation` at runtime.

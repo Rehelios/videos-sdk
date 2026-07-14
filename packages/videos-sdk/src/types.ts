@@ -67,12 +67,15 @@ export interface IngestOptions {
   readonly passthrough?: string;
 }
 
+export type CaptionSource = "file" | "url";
+
 export interface Capabilities {
   readonly dash: boolean;
   readonly ingestFromUrl: boolean;
   readonly signedPlayback: boolean;
   readonly thumbnailAtTime: boolean;
   readonly captions: boolean;
+  readonly captionSource: CaptionSource;
   readonly webhooks: boolean;
 }
 
@@ -83,15 +86,28 @@ export interface Caption {
   readonly url?: string;
 }
 
-export interface AddCaptionInput {
+interface CaptionInputBase {
   readonly language: string;
   readonly label: string;
+}
+
+export interface CaptionFileInput extends CaptionInputBase {
   readonly body: VideoBody;
 }
 
-export interface CaptionOps {
+export interface CaptionUrlInput extends CaptionInputBase {
+  readonly url: string;
+}
+
+export type AddCaptionInput = CaptionFileInput | CaptionUrlInput;
+
+export type CaptionInputOf<C extends Capabilities> = C["captionSource"] extends "url"
+  ? CaptionUrlInput
+  : CaptionFileInput;
+
+export interface CaptionOps<I extends AddCaptionInput = AddCaptionInput> {
   list(assetId: string): Promise<readonly Caption[]>;
-  add(assetId: string, input: AddCaptionInput): Promise<Caption>;
+  add(assetId: string, input: I): Promise<Caption>;
   remove(assetId: string, captionId: string): Promise<void>;
 }
 
@@ -99,11 +115,12 @@ export type WebhookEventType =
   | "asset.ready"
   | "asset.errored"
   | "upload.completed"
-  | "asset.deleted";
+  | "asset.deleted"
+  | "unknown";
 
 export interface WebhookEvent {
   readonly type: WebhookEventType;
-  readonly assetId: string;
+  readonly assetId?: string;
   readonly raw: unknown;
 }
 

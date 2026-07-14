@@ -85,17 +85,20 @@ type AssetStatus = "waiting_upload" | "uploading" | "processing" | "ready" | "er
 
 `Asset` is `{ id, status, raw }` plus optional `duration`, `width`, `height`,
 `createdAt`, `passthrough`. Transcoding is async: after `upload()` an asset is
-usually `processing`, and playback only works once it's `ready`. Poll `get(id)`
-until `status === "ready"` (webhooks are not implemented yet — see below).
+usually `processing`, and playback only works once it's `ready`. Either verify a
+webhook (below) or poll `get(id)` until `status === "ready"`.
 
 ## Capability matrix
 
-|                    | Rehelios | Mux | Bunny | Cloudflare |
-| ------------------ | -------- | --- | ----- | ---------- |
-| `dash`             | ✅       | ❌  | ❌    | ✅         |
-| `ingestFromUrl`    | ✅       | ✅  | ✅    | ✅         |
-| `signedPlayback`   | ✅       | ✅  | ✅    | ✅         |
-| `thumbnailAtTime`  | ❌       | ✅  | ❌    | ✅         |
+|                    | Rehelios | Mux    | Bunny  | Cloudflare |
+| ------------------ | -------- | ------ | ------ | ---------- |
+| `dash`             | ✅       | ❌     | ❌     | ✅         |
+| `ingestFromUrl`    | ✅       | ✅     | ✅     | ✅         |
+| `signedPlayback`   | ✅       | ✅     | ✅     | ✅         |
+| `thumbnailAtTime`  | ❌       | ✅     | ❌     | ✅         |
+| `captions`         | ✅       | ✅     | ✅     | ✅         |
+| `captionSource`    | `file`   | `url`  | `file` | `file`     |
+| `webhooks`         | ✅       | ✅     | ✅     | ✅         |
 
 So this is a **compile error**, and that is the whole point — don't try to work
 around it, pick the right provider or the right call:
@@ -109,23 +112,69 @@ const b = createVideos({ adapter: bunny(cfg) });
 b.thumbnail(id, { time: 3 });       // ❌ Expected 1 argument, got 2
 ```
 
-`signedPlayback` is *typed* as available on all four, but it needs signing
-credentials in the adapter config (see below) or it throws at runtime.
+`signedPlayback` and `webhooks.verify` are *typed* as available on all four, but
+they need credentials in the adapter config (see below) or they throw a typed
+`VideoError` at runtime.
+
+## Captions
+
+`captionSource` decides what `captions.add` accepts, so the compiler picks the
+right shape for you. **Mux ingests a subtitle track by fetching a public URL; the
+other three take the file itself.**
+
+```ts
+await mux.captions.add(id, { language: "en", label: "English", url: "https://…/en.vtt" });
+await bunny.captions.add(id, { language: "en", label: "English", body: vttFile });
+
+await videos.captions.list(id);          // readonly Caption[]
+await videos.captions.remove(id, caption.id);
+```
+
+`Caption.id` is whatever `remove()` needs: the **language code** on Rehelios,
+Bunny and Cloudflare (they key captions by language, so re-adding the same
+language replaces it), and the **track id** on Mux. `Caption.url` points at the
+public `.vtt` on Mux and Bunny; Cloudflare and Rehelios don't expose one, so it
+is absent there.
+
+## Webhooks
+
+`webhooks.verify(request)` checks the provider's HMAC signature and returns a
+normalized event. It **throws** (`unauthorized`) on a bad signature or a stale
+timestamp — so a resolved promise means the request is authentic. Pass the raw
+`Request`; don't read its body first.
+
+```ts
+const event = await videos.webhooks.verify(request);
+event.type;     // "asset.ready" | "asset.errored" | "upload.completed" | "asset.deleted" | "unknown"
+event.assetId;  // string | undefined
+event.raw;      // the provider's payload
+```
+
+Each adapter needs `webhookSecret` in its config. Where it comes from: **Mux** —
+the per-endpoint signing secret in the dashboard. **Cloudflare** — the `secret`
+returned when you create the webhook subscription. **Bunny** — the video
+library's *read-only* API key. **Rehelios** — the org webhook secret (`whsec_…`).
+
+`type` is `"unknown"` for any event the SDK doesn't model (a Mux track event, a
+Bunny "resolution finished", a Rehelios `caption.ready`) — it is verified and
+handed to you rather than thrown away. Not every provider emits every type:
+Cloudflare only notifies on ready/errored, so `upload.completed` and
+`asset.deleted` never arrive from it.
 
 ## Adapter config and gotchas
 
 ```ts
 import { rehelios } from "videos-sdk/rehelios";
-rehelios({ apiKey, apiBaseUrl?, appUrl?, collectionId?, visibility? });  // "public" | "private"
+rehelios({ apiKey, apiBaseUrl?, appUrl?, collectionId?, visibility?, webhookSecret? });
 
 import { mux } from "videos-sdk/mux";
-mux({ tokenId, tokenSecret, signingKeyId?, signingKeySecret? });
+mux({ tokenId, tokenSecret, signingKeyId?, signingKeySecret?, webhookSecret? });
 
 import { bunny } from "videos-sdk/bunny";
-bunny({ libraryId, apiKey, pullZone, tokenAuthKey? });
+bunny({ libraryId, apiKey, pullZone, tokenAuthKey?, webhookSecret? });
 
 import { cloudflare } from "videos-sdk/cloudflare";
-cloudflare({ accountId, apiToken, customerSubdomain, maxDurationSeconds? });
+cloudflare({ accountId, apiToken, customerSubdomain, maxDurationSeconds?, webhookSecret? });
 ```
 
 - **Rehelios** — `thumbnailAtTime` is false: `thumbnail()` returns a best-effort
@@ -165,13 +214,6 @@ try {
 401/403 → `unauthorized`, 404 → `not_found`, 429 → `rate_limited`, other non-2xx
 → `provider_error`, a failed fetch → `network`.
 
-## Not implemented yet
-
-`captions` and `webhooks` are declared in the capability types but **every
-adapter currently rejects** with `provider_error` ("not implemented yet"). Do not
-build on them and do not tell the user they work. To know when an asset is ready,
-poll `get(id)` for now.
-
 ## Recipes
 
 **Browser upload without proxying bytes through your server** — mint the ticket
@@ -182,6 +224,16 @@ const ticket = await videos.signedUploadUrl({ maxSizeBytes: 2_000_000_000 });
 // -> { url, id, method }  send `url` + `id` to the browser
 await fetch(ticket.url, { method: ticket.method, body: file });
 // then poll videos.get(ticket.id) until status === "ready"
+```
+
+**React to "the video is ready" instead of polling** — one route, any provider:
+
+```ts
+export async function POST(request: Request) {
+  const event = await videos.webhooks.verify(request);  // throws if not authentic
+  if (event.type === "asset.ready" && event.assetId) await publish(event.assetId);
+  return new Response(null, { status: 204 });
+}
 ```
 
 **Migrate a library without re-uploading:**
