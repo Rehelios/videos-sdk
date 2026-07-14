@@ -66,6 +66,28 @@ describe("http client rate limiting", () => {
     expect(calls()).toBe(2);
   });
 
+  test("does not retry when Retry-After asks for longer than the ceiling", async () => {
+    const calls = respondWith([rateLimited("120"), ok()]);
+
+    const startedAt = Date.now();
+    const error = (await videos()
+      .get("v1")
+      .catch((cause: unknown) => cause)) as VideoError;
+
+    expect(error.code).toBe("rate_limited");
+    expect(calls()).toBe(1);
+    expect(Date.now() - startedAt).toBeLessThan(1000);
+  });
+
+  test("falls back to backoff when Retry-After is unparseable", async () => {
+    const calls = respondWith([rateLimited("soon"), ok()]);
+
+    const asset = await videos().get("v1");
+
+    expect(asset.id).toBe("v1");
+    expect(calls()).toBe(2);
+  });
+
   test("does not retry a non-429 failure", async () => {
     const calls = respondWith([new Response("nope", { status: 500 })]);
 

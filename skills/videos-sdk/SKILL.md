@@ -299,11 +299,17 @@ try {
 401/403 → `unauthorized`, 404 → `not_found`, 429 → `rate_limited`, other non-2xx
 → `provider_error`, a failed fetch → `network`.
 
-**429 is retried for you** — up to 5 times, honouring `Retry-After` (and falling
-back to exponential backoff with jitter). A `rate_limited` error means the retries
-were already exhausted, so don't wrap calls in a retry loop of your own. Nothing
-else is retried: a 429 is safe to replay because the request was rejected rather
-than processed, which isn't true of a network failure mid-`POST`.
+**429 is retried for you** — up to 5 times. If the provider sends `Retry-After`,
+the client waits exactly that long; otherwise it backs off exponentially with
+jitter (capped at 20s). It never retries *earlier* than asked: a `Retry-After`
+above 60s is not clamped and slept through, it simply isn't retried — blocking
+your call for minutes is your decision, not the SDK's, so you get `rate_limited`
+straight away and can schedule the work yourself.
+
+A `rate_limited` error therefore means the retries are already spent — don't wrap
+calls in a retry loop of your own. Nothing else is retried: a 429 is safe to
+replay because the request was rejected rather than processed, which isn't true
+of a network failure mid-`POST`.
 
 ## Recipes
 

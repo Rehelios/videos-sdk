@@ -63,10 +63,16 @@ try {
 ### Rate limits are already retried
 
 **You don't need a retry loop for 429.** The HTTP client retries it up to 5 times on its
-own, honouring the provider's `Retry-After` header and falling back to exponential backoff
-with jitter when there isn't one. By the time a `rate_limited` error reaches you, those
-retries are spent — wrapping the call in another loop just adds a second, slower backoff on
-top of the first.
+own. When the provider sends a `Retry-After` header the client waits exactly that long; when
+it doesn't, the client backs off exponentially with jitter (capped at 20s). By the time a
+`rate_limited` error reaches you, those retries are spent — wrapping the call in another loop
+just adds a second, slower backoff on top of the first.
+
+The client never retries *sooner* than the provider asked. If `Retry-After` exceeds 60s, the
+request is **not** retried at all and you get `rate_limited` immediately, rather than the
+client clamping the wait, retrying early, and burning the budget against a provider that
+already told it to wait. Stalling your call for minutes is a scheduling decision that belongs
+to you, not to the SDK.
 
 429 is the only status retried automatically, and that's deliberate: a rate-limited request
 was *rejected*, never processed, so replaying it is safe. A `network` failure mid-`POST` has
