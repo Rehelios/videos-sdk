@@ -22,20 +22,57 @@ function codeForStatus(status: number): VideoErrorCode {
   return "provider_error";
 }
 
+const MAX_RATE_LIMIT_RETRIES = 5;
+const BASE_RETRY_DELAY_MS = 500;
+const MAX_BACKOFF_DELAY_MS = 20_000;
+const MAX_RETRY_AFTER_MS = 60_000;
+
+function parseRetryAfter(value: string): number | null {
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  const at = Date.parse(value);
+  if (!Number.isNaN(at)) return Math.max(at - Date.now(), 0);
+  return null;
+}
+
+function retryDelayMs(response: Response, attempt: number): number | null {
+  const retryAfter = response.headers.get("retry-after");
+  if (retryAfter !== null) {
+    const requested = parseRetryAfter(retryAfter);
+    if (requested !== null) {
+      return requested > MAX_RETRY_AFTER_MS ? null : requested;
+    }
+  }
+  const backoff = BASE_RETRY_DELAY_MS * 2 ** attempt + Math.random() * BASE_RETRY_DELAY_MS;
+  return Math.min(backoff, MAX_BACKOFF_DELAY_MS);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function createHttpClient(options: HttpClientOptions): HttpClient {
   const { baseUrl, headers, provider } = options;
 
   async function request(path: string, init: RequestInit): Promise<Response> {
-    let response: Response;
-    try {
-      response = await fetch(`${baseUrl}${path}`, {
-        ...init,
-        headers: { ...headers, ...(init.headers as Record<string, string> | undefined) },
-      });
-    } catch (cause) {
-      throw new VideoError("network", `Request to ${provider} failed.`, { provider, cause });
-    }
-    if (!response.ok) {
+    for (let attempt = 0; ; attempt++) {
+      let response: Response;
+      try {
+        response = await fetch(`${baseUrl}${path}`, {
+          ...init,
+          headers: { ...headers, ...(init.headers as Record<string, string> | undefined) },
+        });
+      } catch (cause) {
+        throw new VideoError("network", `Request to ${provider} failed.`, { provider, cause });
+      }
+      if (response.ok) return response;
+      if (response.status === 429 && attempt < MAX_RATE_LIMIT_RETRIES) {
+        const delay = retryDelayMs(response, attempt);
+        if (delay !== null) {
+          await sleep(delay);
+          continue;
+        }
+      }
       const detail = await response.text().catch(() => "");
       throw new VideoError(
         codeForStatus(response.status),
@@ -43,7 +80,6 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
         { provider, status: response.status },
       );
     }
-    return response;
   }
 
   return {

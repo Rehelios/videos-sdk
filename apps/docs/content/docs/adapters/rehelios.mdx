@@ -21,7 +21,7 @@ const videos = createVideos({
 | `apiKey`       | `string`                 |    ✓     | Your Rehelios API key (`rh_live_…`).                 |
 | `collectionId` | `string`                 |    —     | Default collection for videos created/uploaded here. |
 | `visibility`   | `'public' \| 'private'`  |    —     | Default visibility for new videos.                   |
-| `apiBaseUrl`   | `string`                 |    —     | Override the API base URL.                           |
+| `apiBaseUrl`   | `string`                 |    —     | Override the API **origin**, e.g. `https://api.rehelios.com`. The adapter appends `/v1` itself — a base already ending in `/v1` is stripped rather than doubled. |
 | `appUrl`       | `string`                 |    —     | Override the app origin (embed / poster URLs).       |
 
 ## Capabilities
@@ -29,3 +29,19 @@ const videos = createVideos({
 DASH playback, signed playback, captions, and webhooks are supported. Rehelios exposes a
 fixed poster (not thumbnails at an arbitrary timestamp), so `thumbnailAtTime` is off. See
 [Capability-safe by types](/docs/guides/capability-safety).
+
+## Signed playback
+
+`signedPlayback()` only means something for a video whose `visibility` is `private` —
+public videos play from a stable, unsigned URL by design.
+
+You sign the **master manifest and nothing else**, and `expiresInSeconds` bounds how long
+that *link* stays usable — not how long an already-started session may run. A short TTL
+does **not** cut playback off mid-video, even though it looks like it should: the Rehelios
+CDN rewrites the manifest on the way out and stamps a fresh 6-hour session token onto every
+child URI (variants, segments, subtitles, thumbnail sprites). The token you minted only has
+to survive the single `master.m3u8` request; it is never the token the segments carry.
+
+So don't build token-refresh plumbing — no `xhrSetup` hook to swap a stale token, no
+re-signing on a timer, no swapping `src` mid-playback. There is nothing to refresh, which is
+also why native HLS on iOS (where no request hook exists at all) works fine.

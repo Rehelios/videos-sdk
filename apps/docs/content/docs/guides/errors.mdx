@@ -32,7 +32,7 @@ class VideoError extends Error {
 | `not_found`             | The asset doesn't exist (HTTP 404).                         |
 | `unsupported_operation` | The provider can't do this — also a **compile error**.      |
 | `upload_failed`         | The bytes didn't make it to the provider.                   |
-| `rate_limited`          | Too many requests (HTTP 429). Back off and retry.           |
+| `rate_limited`          | Too many requests (HTTP 429), **after** the built-in retries. |
 | `provider_error`        | The provider returned something unexpected (usually 5xx).   |
 | `network`               | The request never completed (DNS, timeout, offline).        |
 | `invalid_request`       | Bad arguments before any request went out.                  |
@@ -60,10 +60,25 @@ try {
 }
 ```
 
-### Retrying rate limits
+### Rate limits are already retried
 
-`rate_limited` and transient `network` / `provider_error` failures are the ones worth
-retrying. Everything else is a bug in your call, not a blip:
+**You don't need a retry loop for 429.** The HTTP client retries it up to 5 times on its
+own. When the provider sends a `Retry-After` header the client waits exactly that long; when
+it doesn't, the client backs off exponentially with jitter (capped at 20s). By the time a
+`rate_limited` error reaches you, those retries are spent — wrapping the call in another loop
+just adds a second, slower backoff on top of the first.
+
+The client never retries *sooner* than the provider asked. If `Retry-After` exceeds 60s, the
+request is **not** retried at all and you get `rate_limited` immediately, rather than the
+client clamping the wait, retrying early, and burning the budget against a provider that
+already told it to wait. Stalling your call for minutes is a scheduling decision that belongs
+to you, not to the SDK.
+
+429 is the only status retried automatically, and that's deliberate: a rate-limited request
+was *rejected*, never processed, so replaying it is safe. A `network` failure mid-`POST` has
+no such guarantee — the provider may well have created the asset before the connection
+dropped — so retrying it is a decision only you can make, with knowledge of whether the call
+is idempotent:
 
 ```ts
 async function withRetry<T>(fn: () => Promise<T>, tries = 3): Promise<T> {
@@ -71,9 +86,7 @@ async function withRetry<T>(fn: () => Promise<T>, tries = 3): Promise<T> {
     try {
       return await fn();
     } catch (error) {
-      const retryable =
-        error instanceof VideoError &&
-        (error.code === 'rate_limited' || error.code === 'network');
+      const retryable = error instanceof VideoError && error.code === 'network';
       if (!retryable || attempt >= tries) throw error;
       await new Promise((r) => setTimeout(r, 2 ** attempt * 250));
     }

@@ -23,6 +23,12 @@ Install:
 bun add videos-sdk   # or: npm i videos-sdk
 ```
 
+**Require `>= 0.2.0`.** In `0.1.x`, `captions` and `webhooks` were declared in
+`capabilities` but their methods were unimplemented stubs that threw at runtime —
+so on an old install the compiler lets the call through and it fails in
+production. They are real from `0.2.0` on. Check the installed version before
+concluding anything about them.
+
 ## The mental model
 
 ```ts
@@ -112,6 +118,16 @@ async function waitForReady(id: string): Promise<Asset> {
   }
 }
 ```
+
+**Compare against `AssetStatus`, never against a provider's own status string.**
+The five states above are the whole contract; the raw vocabulary differs per
+provider and is not part of it (Rehelios, for instance, emits `created`,
+`uploading`, `queued`, `transcoding`, `ready`, `failed` — no `errored`, no
+`processing`; the adapter is what maps them). Hand-writing a union of what you
+think the provider sends is how you get a branch that never fires: because
+unknown → `processing`, a status you guessed wrong looks like "still encoding"
+forever, and a failed encode silently polls until the end of time. If you need the
+provider's own value it is on `asset.raw` — but branch on `asset.status`.
 
 ## Capability matrix
 
@@ -211,7 +227,9 @@ cloudflare({ accountId: string, apiToken: string, customerSubdomain: string, max
 
 - **Rehelios** — `thumbnailAtTime` is false: `thumbnail()` returns a best-effort
   embed poster; the accurate poster is `playback().poster`. Signed playback needs
-  `visibility: "private"` to be meaningful.
+  `visibility: "private"` to be meaningful. `apiBaseUrl` is the **origin**
+  (`https://api.rehelios.com`) — the SDK appends `/v1` itself. A base that already
+  ends in `/v1` is tolerated (stripped), but don't rely on that elsewhere.
 - **Mux** — asset id ≠ playback id. `Asset.id` is the **asset** id and that's what
   every method takes; `playback()` resolves the playback id for you. `thumbnail(id)`
   is best-effort (it treats `id` as a playback id), so prefer `playback().poster`
@@ -223,6 +241,41 @@ cloudflare({ accountId: string, apiToken: string, customerSubdomain: string, max
 - **Cloudflare** — needs *paid* Stream. Direct uploads require a duration cap;
   `maxDurationSeconds` defaults to 21600. Playback and thumbnail URLs are
   deterministic from the uid.
+
+## Signed playback
+
+```ts
+const url = await videos.signedPlayback(id, { expiresInSeconds: 3600 });
+```
+
+You get back a manifest URL carrying a token. Hand it straight to the player —
+`hls.js`, Vidstack, or a native `<video>` on Safari/iOS. **You sign the master
+manifest and nothing else.**
+
+The reflex worry — *"the token expires in an hour, so playback dies an hour in,
+and segment URLs are baked into the media playlist, so a short TTL cuts the video
+off mid-watch"* — **is wrong, and it is worth being explicit about because it
+looks right on paper.** `expiresInSeconds` bounds how long the *link* stays
+usable, not how long a session that already started may run. A player fetches the
+manifest once, up front, and every provider here issues playback credentials for
+the media itself at that moment:
+
+- **Rehelios** — the CDN rewrites the manifest on the way out, stamping a **fresh
+  6h session token** on every child URI (variants, segments, subtitles, thumbnail
+  sprites). The token you minted only has to survive the single `master.m3u8`
+  request; it is never the token the segments carry.
+- **Mux / Bunny / Cloudflare** — the signed manifest authorizes the session at the
+  edge the same way.
+
+So: **don't build token-refresh plumbing.** No `xhrSetup` hook to swap a stale
+token, no re-signing on a timer, no swapping `src` mid-playback (which would only
+reset the player anyway). There is nothing to refresh, and native HLS on iOS —
+where no request hook exists at all — works for exactly that reason. If you are
+about to write a workaround for expiring segment tokens, the premise is false;
+check the child URI's token before you build anything.
+
+On Rehelios specifically, `signedPlayback` only *means* something for a video with
+`visibility: "private"` — public videos play from a stable unsigned URL by design.
 
 ## Errors
 
@@ -245,6 +298,18 @@ try {
 
 401/403 → `unauthorized`, 404 → `not_found`, 429 → `rate_limited`, other non-2xx
 → `provider_error`, a failed fetch → `network`.
+
+**429 is retried for you** — up to 5 times. If the provider sends `Retry-After`,
+the client waits exactly that long; otherwise it backs off exponentially with
+jitter (capped at 20s). It never retries *earlier* than asked: a `Retry-After`
+above 60s is not clamped and slept through, it simply isn't retried — blocking
+your call for minutes is your decision, not the SDK's, so you get `rate_limited`
+straight away and can schedule the work yourself.
+
+A `rate_limited` error therefore means the retries are already spent — don't wrap
+calls in a retry loop of your own. Nothing else is retried: a 429 is safe to
+replay because the request was rejected rather than processed, which isn't true
+of a network failure mid-`POST`.
 
 ## Recipes
 
