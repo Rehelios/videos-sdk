@@ -11,8 +11,8 @@ await runCli(
     // already prepends `npm(options.npm)` to the plugin list, so passing it again
     // registers it twice and `applyDraft` bumps every version twice.
     npm: { trustedPublish: { provider: "github", workflow: "release.yml" } },
-    // `versionPr: false` disables the "Version Packages" PR. release.yml drafts,
-    // versions and publishes in a single job instead — see the header there.
-    plugins: [github({ repo: "rehelios/videos-sdk", versionPr: false })],
+    // The "Version Packages" PR is how the bump reaches `main`: the runner cannot push
+    // to `main` (protected), but it can push a branch and open a PR. See release.yml.
+    plugins: [github({ repo: "rehelios/videos-sdk" })],
   }),
 );

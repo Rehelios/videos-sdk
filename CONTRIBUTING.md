@@ -74,14 +74,19 @@ Only `feat`, `fix`, `perf` and `revert` (plus anything marked breaking with `!` 
 
 ## How a release ships
 
-Merging to `main` runs [`release.yml`](.github/workflows/release.yml), which does the
-whole thing in one job: it reads the conventional commits since the last tag, bumps the
-version, writes `CHANGELOG.md`, commits that back to `main`, publishes to npm with
+Merging to `main` runs [`release.yml`](.github/workflows/release.yml). It reads the
+conventional commits since the last tag, bumps the version, writes `CHANGELOG.md`, and
+opens a **"Version Packages" PR** with that bump.
+
+Merging *that* PR runs the workflow again: the version in the repo is now ahead of the one
+on npm, so it publishes with
 [provenance](https://docs.npmjs.com/generating-provenance-statements) via OIDC trusted
-publishing, and creates the git tag and GitHub Release.
+publishing and creates the git tag and GitHub Release. **A release is therefore two
+merges** — your change, then the version bump. (The runner cannot commit to `main`
+directly: the branch is protected, and a commit it just created has no `check` status.)
 
 If no commit since the last tag was releasable, the job stops early and nothing ships.
-Nobody cuts releases by hand, and there is no version PR to merge.
+Nobody cuts releases by hand.
 
 ## Maintainers: first-time npm setup
 

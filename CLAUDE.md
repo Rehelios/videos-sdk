@@ -154,11 +154,13 @@ Exactly **two workflows**. Keep it that way.
 
 - **CI** (`.github/workflows/ci.yml`): on push/PR — `bun install --frozen-lockfile`, lint,
   build, typecheck (both packages), SDK test. Read-only, no credentials.
-- **Release** (`.github/workflows/release.yml`): on **push to `main`**, one job does
-  everything. Tegami (`scripts/tegami.ts`) drafts changelog entries from the conventional
-  commits since the last tag, bumps the version, writes `CHANGELOG.md`, we commit that back
-  to `main`, then Tegami publishes to npm via **OIDC trusted publishing** (`id-token: write`,
-  npm ≥ 11.5.1, automatic provenance) and creates the tag + GitHub Release.
+- **Release** (`.github/workflows/release.yml`): on **push to `main`**, `tegami ci`.
+  Tegami (`scripts/tegami.ts`) drafts changelog entries from the conventional commits since
+  the last tag, bumps the version, writes `CHANGELOG.md` — and opens a **"Version Packages"
+  PR** with that bump. Merging that PR runs the workflow again; now the repo version is
+  ahead of npm, so Tegami publishes via **OIDC trusted publishing** (`id-token: write`, npm
+  ≥ 11.5.1, automatic provenance) and creates the tag + GitHub Release. **So a release takes
+  two merges: the change, then the Version Packages PR.**
 
 **The release contract is the commit subject.** PRs are squash-merged, so the PR title *is*
 the commit. `feat(videos-sdk):` → minor, `fix|perf|revert(videos-sdk):` → patch, `!` or a
@@ -168,9 +170,20 @@ workspace package and is silently dropped. That silence is the sharpest edge her
 
 Non-obvious constraints, all learned the hard way:
 
-- **`versionPr: false`** on the github plugin is what removes the old "Version Packages" PR.
-  Without it Tegami's `ci` command versions on one run and publishes on the *next*, which is
-  why releases used to take two merges.
+- **The two-merge flow is forced by branch protection, not chosen.** `main` restricts pushes
+  to a named user *and* requires the `check` status, and a commit the runner just created has
+  neither — so `git push origin HEAD:main` from the release job dies with `GH006: Protected
+  branch update failed`. The runner *can* push an unprotected branch, which is exactly what
+  the Version Packages PR is. Setting `versionPr: false` and committing the bump straight to
+  `main` is a one-merge release **and it cannot work as things stand** — it needs a pusher
+  that bypasses protection: a GitHub App installed on the org (added to a repo ruleset's
+  bypass list), a fine-grained PAT with `Contents: write`, or GitHub Team (org rulesets are a
+  paid feature, and only there can `GitHub Actions` itself be a bypass actor — a *repo*
+  ruleset rejects it with "must be part of the owner organization"). Get one of those and the
+  one-merge flow is a three-line change.
+- **The Version Packages PR has no CI run.** Tegami pushes its branch with `GITHUB_TOKEN`,
+  and GitHub does not trigger workflows on `GITHUB_TOKEN` pushes (that is also what stops the
+  release from looping). So the required `check` never appears on it — merge it as an admin.
 - **Never `git add` only the package files.** `tegami version` also rewrites the workspace
   version inside `bun.lock`; leaving it out breaks the next `--frozen-lockfile` install.
 - **`.tegami/changes/` is gitignored.** The drafted entries and `publish-lock.yaml` must
@@ -181,5 +194,4 @@ Non-obvious constraints, all learned the hard way:
 - **Trusted publishing is bound to the workflow filename.** Renaming `release.yml` breaks
   publishing until it's reconfigured on npmjs.com. npm can't do the *first* publish of a new
   package this way; v0.1.0 was bootstrapped with `tegami npm pretrust`.
-- The release commit is pushed with the default `GITHUB_TOKEN`, and GitHub doesn't trigger
-  workflows on `GITHUB_TOKEN` pushes — that's what stops the loop. No `RELEASE_TOKEN` needed.
+- No `RELEASE_TOKEN` exists, and the flow above is built so none is needed.
