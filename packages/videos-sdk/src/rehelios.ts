@@ -1,11 +1,20 @@
 import type { VideoAdapter } from "./adapter";
 import { VideoError } from "./errors";
+import { toBlob } from "./internal/bytes";
 import { createHttpClient } from "./internal/http";
-import { rejects } from "./internal/pending";
+import {
+  assertFreshTimestamp,
+  assertSignature,
+  hmacSha256Hex,
+  parseJson,
+  requireHeader,
+  requireWebhookSecret,
+} from "./internal/webhooks";
 import type {
   Asset,
   AssetStatus,
   Caption,
+  CaptionFileInput,
   CaptionOps,
   CreateInput,
   IngestOptions,
@@ -18,6 +27,7 @@ import type {
   UploadTicket,
   VideoBody,
   WebhookEvent,
+  WebhookEventType,
   WebhookOps,
 } from "./types";
 
@@ -27,6 +37,7 @@ export interface ReheliosConfig {
   readonly appUrl?: string;
   readonly collectionId?: string;
   readonly visibility?: "public" | "private";
+  readonly webhookSecret?: string;
 }
 
 export type ReheliosCapabilities = {
@@ -35,6 +46,7 @@ export type ReheliosCapabilities = {
   readonly signedPlayback: true;
   readonly thumbnailAtTime: false;
   readonly captions: true;
+  readonly captionSource: "file";
   readonly webhooks: true;
 };
 
@@ -70,6 +82,33 @@ interface ReheliosUploadInit {
 
 interface ReheliosPage {
   readonly items: readonly ReheliosVideo[];
+}
+
+interface ReheliosSubtitleTrack {
+  readonly language: string;
+  readonly name?: string;
+}
+
+interface ReheliosVideoDetail extends ReheliosVideo {
+  readonly subtitleTracks?: readonly ReheliosSubtitleTrack[];
+}
+
+interface ReheliosWebhookBody {
+  readonly event?: string;
+  readonly videoId?: string;
+}
+
+const WEBHOOK_EVENTS: Record<string, WebhookEventType> = {
+  "video.ready": "asset.ready",
+  "video.failed": "asset.errored",
+};
+
+function toCaption(track: ReheliosSubtitleTrack): Caption {
+  return {
+    id: track.language,
+    language: track.language,
+    label: track.name ?? track.language,
+  };
 }
 
 function toStatus(value: string): AssetStatus {
@@ -114,14 +153,6 @@ function toPlayback(video: ReheliosVideo): Playback {
   };
 }
 
-async function toBlob(body: VideoBody): Promise<Blob> {
-  if (body instanceof Blob) return body;
-  if (typeof body === "string") return new Blob([body]);
-  if (body instanceof Uint8Array || body instanceof ArrayBuffer)
-    return new Blob([body as BlobPart]);
-  return new Response(body).blob();
-}
-
 export function rehelios(config: ReheliosConfig): VideoAdapter<ReheliosCapabilities> {
   if (config.apiKey === "") {
     throw new VideoError("invalid_request", "rehelios() requires an apiKey.", {
@@ -142,6 +173,7 @@ export function rehelios(config: ReheliosConfig): VideoAdapter<ReheliosCapabilit
     signedPlayback: true,
     thumbnailAtTime: false,
     captions: true,
+    captionSource: "file",
     webhooks: true,
   };
 
@@ -154,14 +186,48 @@ export function rehelios(config: ReheliosConfig): VideoAdapter<ReheliosCapabilit
   const getVideo = async (id: string): Promise<ReheliosVideo> =>
     (await http.get<Envelope<ReheliosVideo>>(`/v1/videos/${id}`)).data;
 
-  const captions: CaptionOps = {
-    list: rejects<readonly Caption[]>(PROVIDER, "captions.list"),
-    add: rejects<Caption>(PROVIDER, "captions.add"),
-    remove: rejects<void>(PROVIDER, "captions.remove"),
+  const captions: CaptionOps<CaptionFileInput> = {
+    list: async (assetId: string): Promise<readonly Caption[]> => {
+      const video = (await http.get<Envelope<ReheliosVideoDetail>>(`/v1/videos/${assetId}`)).data;
+      return (video.subtitleTracks ?? []).map(toCaption);
+    },
+
+    add: async (assetId: string, input: CaptionFileInput): Promise<Caption> => {
+      const form = new FormData();
+      form.append("file", await toBlob(input.body, "text/vtt"), `${input.language}.vtt`);
+      form.append("language", input.language);
+      form.append("name", input.label);
+      const track = (
+        await http.postForm<Envelope<ReheliosSubtitleTrack>>(
+          `/v1/videos/${assetId}/subtitles/upload`,
+          form,
+        )
+      ).data;
+      return toCaption(track);
+    },
+
+    remove: async (assetId: string, captionId: string): Promise<void> => {
+      await http.del(`/v1/videos/${assetId}/subtitles/${captionId}`);
+    },
   };
 
   const webhooks: WebhookOps = {
-    verify: rejects<WebhookEvent>(PROVIDER, "webhooks.verify"),
+    verify: async (request: Request): Promise<WebhookEvent> => {
+      const secret = requireWebhookSecret(PROVIDER, config.webhookSecret, "webhookSecret");
+      const timestamp = requireHeader(PROVIDER, request, "x-rehelios-timestamp");
+      const signature = requireHeader(PROVIDER, request, "x-rehelios-signature");
+      assertFreshTimestamp(PROVIDER, Date.parse(timestamp) / 1000);
+      const raw = await request.text();
+      const expected = await hmacSha256Hex(secret, `${timestamp}.${raw}`);
+      assertSignature(PROVIDER, `sha256=${expected}`, signature);
+
+      const body = parseJson<ReheliosWebhookBody>(PROVIDER, raw);
+      return {
+        type: WEBHOOK_EVENTS[body.event ?? ""] ?? "unknown",
+        raw: body,
+        ...(body.videoId !== undefined ? { assetId: body.videoId } : {}),
+      };
+    },
   };
 
   return {

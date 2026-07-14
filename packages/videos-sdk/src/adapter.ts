@@ -1,6 +1,7 @@
 import type {
   Asset,
   Capabilities,
+  CaptionInputOf,
   CaptionOps,
   CreateInput,
   IngestOptions,
@@ -32,6 +33,6 @@ export interface VideoAdapter<C extends Capabilities = Capabilities> {
   signedPlayback(id: string, options: SignedPlaybackOptions): Promise<string>;
 
   ingestFromUrl(url: string, options?: IngestOptions): Promise<Asset>;
-  readonly captions: CaptionOps;
+  readonly captions: CaptionOps<CaptionInputOf<C>>;
   readonly webhooks: WebhookOps;
 }

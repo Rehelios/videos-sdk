@@ -34,8 +34,9 @@ const CAPABILITIES = [
   { name: 'DASH playback', rehelios: true, mux: false, bunny: false, cloudflare: true },
   { name: 'Signed playback', rehelios: true, mux: true, bunny: true, cloudflare: true },
   { name: 'Thumbnail at time', rehelios: false, mux: true, bunny: false, cloudflare: true },
-  { name: 'Captions', rehelios: true, mux: true, bunny: true, cloudflare: true },
-  { name: 'Webhooks', rehelios: true, mux: true, bunny: true, cloudflare: true },
+  { name: 'Captions from file', rehelios: true, mux: false, bunny: true, cloudflare: true },
+  { name: 'Captions from URL', rehelios: false, mux: true, bunny: false, cloudflare: false },
+  { name: 'Verified webhooks', rehelios: true, mux: true, bunny: true, cloudflare: true },
 ] as const;
 
 function CodeBlock({ code, lang = 'ts' }: { code: string; lang?: string }) {
@@ -59,6 +60,45 @@ function CopyButton({ text }: { text: string }) {
       {text}
       {copied ? <Check className="size-3.5 text-fd-primary" /> : <Copy className="size-3.5 text-fd-muted-foreground" />}
     </button>
+  );
+}
+
+const INSTALL_TABS = [
+  {
+    id: 'humans',
+    label: 'For humans',
+    command: 'bun add videos-sdk',
+    hint: 'Adds the SDK to your project.',
+  },
+  {
+    id: 'agents',
+    label: 'For agents',
+    command: 'npx skills add Rehelios/videos-sdk',
+    hint: 'Installs the videos-sdk skill into Claude Code, Cursor, Codex and 70+ agents.',
+  },
+] as const;
+
+function InstallTabs() {
+  const [active, setActive] = useState<(typeof INSTALL_TABS)[number]['id']>('humans');
+  const tab = INSTALL_TABS.find((item) => item.id === active) ?? INSTALL_TABS[0];
+  return (
+    <div className="flex flex-col items-center gap-4">
+      <div className="inline-flex rounded-full border border-fd-border p-1">
+        {INSTALL_TABS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            aria-pressed={item.id === active}
+            onClick={() => setActive(item.id)}
+            className={`rounded-full px-3 py-1 font-mono text-xs transition-colors ${item.id === active ? 'bg-fd-foreground text-fd-background' : 'text-fd-muted-foreground hover:text-fd-foreground'}`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <CopyButton key={tab.id} text={tab.command} />
+      <p className="max-w-sm text-balance text-center text-fd-muted-foreground text-xs">{tab.hint}</p>
+    </div>
   );
 }
 
@@ -182,7 +222,7 @@ function Hero() {
     <section className="flex flex-col items-center px-4 pt-24 pb-16 text-center">
       <Link href="/docs" className="mb-8 inline-flex items-center gap-2 rounded-full border border-fd-border px-3 py-1 font-mono text-fd-muted-foreground text-xs">
         <span className="size-1.5 rounded-full bg-fd-primary" />
-        v0.1.0 — early preview →
+        v0.1.1 — early preview →
       </Link>
       <h1 className="max-w-4xl text-balance font-semibold text-6xl leading-[0.95] tracking-tight sm:text-7xl">
         Upload once.
@@ -192,8 +232,8 @@ function Hero() {
       <p className="mt-6 max-w-2xl text-balance text-fd-muted-foreground text-lg">
         One type-safe API for video across Rehelios, Mux, Bunny Stream, and Cloudflare Stream. Swap the adapter, keep every call site — and let the compiler catch what a provider can't do.
       </p>
-      <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-        <CopyButton text="bun add videos-sdk" />
+      <div className="mt-10 flex flex-col items-center gap-6">
+        <InstallTabs />
         <Link href="/docs" className="font-medium text-fd-foreground text-sm hover:underline">
           Read the docs →
         </Link>
@@ -339,7 +379,7 @@ function FooterCTA() {
         Open source, MIT licensed, built around web standards. Drop in an adapter and forget the difference.
       </p>
       <div className="mt-8">
-        <CopyButton text="bun add videos-sdk" />
+        <InstallTabs />
       </div>
     </section>
   );

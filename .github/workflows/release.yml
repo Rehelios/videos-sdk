@@ -21,7 +21,6 @@ name: Release
 on:
   push:
     branches: [main]
-  workflow_dispatch: {}
 
 # Serialize releases so two pushes can't publish at once.
 concurrency:

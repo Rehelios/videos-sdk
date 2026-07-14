@@ -48,16 +48,17 @@ b.thumbnail(id, { time: 5 }); // ❌ TS error — Bunny thumbnails have no time 
 
 ## Capabilities matrix
 
-| Capability        | rehelios | Mux | Bunny | Cloudflare |
-| ----------------- | :------: | :-: | :---: | :--------: |
-| resumable upload  |    ✅    | ✅  |  ✅   |     ✅     |
-| ingest from URL   |    ✅    | ✅  |  ✅   |     ✅     |
-| HLS playback      |    ✅    | ✅  |  ✅   |     ✅     |
-| DASH playback     |    ✅    | ❌  |  ❌   |     ✅     |
-| signed playback   |    ✅    | ✅  |  ✅   |     ✅     |
-| thumbnail at time |    ✅    | ✅  |  ❌   |     ✅     |
-| captions          |    ✅    | ✅  |  ✅   |     ✅     |
-| webhooks          |    ✅    | ✅  |  ✅   |     ✅     |
+| Capability          | rehelios | Mux | Bunny | Cloudflare |
+| ------------------- | :------: | :-: | :---: | :--------: |
+| resumable upload    |    ✅    | ✅  |  ✅   |     ✅     |
+| ingest from URL     |    ✅    | ✅  |  ✅   |     ✅     |
+| HLS playback        |    ✅    | ✅  |  ✅   |     ✅     |
+| DASH playback       |    ✅    | ❌  |  ❌   |     ✅     |
+| signed playback     |    ✅    | ✅  |  ✅   |     ✅     |
+| thumbnail at time   |    ❌    | ✅  |  ❌   |     ✅     |
+| captions from file  |    ✅    | ❌  |  ✅   |     ✅     |
+| captions from URL   |    ❌    | ✅  |  ❌   |     ❌     |
+| webhooks (verified) |    ✅    | ✅  |  ✅   |     ✅     |
 
 ## Errors
 
@@ -96,8 +97,11 @@ changelog file to write.
 ## Releases
 
 Versioning and publishing are automated with [Tegami](https://tegami.fuma-nama.dev). The
-PR title drives it — `fix(videos-sdk):` is a patch, `feat(videos-sdk):` a minor, a `!` a
-major, and anything else (`chore:`, `docs:`, `ci:`) releases nothing.
+PR title drives it — `fix`, `perf` and `revert` scoped to `videos-sdk` are a patch,
+`feat(videos-sdk):` a minor, and a `!` after the scope (or a `BREAKING CHANGE:` footer) a
+major. Everything else releases nothing: other types (`chore:`, `docs:`, `ci:`), and also
+a missing or wrong scope — `fix:` and `fix(ci):` both resolve to no package and are
+silently dropped.
 
 Merging to `main` bumps the version, writes `CHANGELOG.md`, publishes to npm with
 [provenance](https://docs.npmjs.com/generating-provenance-statements) via OIDC trusted

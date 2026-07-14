@@ -2,6 +2,7 @@ import type { VideoAdapter } from "./adapter";
 import type {
   Asset,
   Capabilities,
+  CaptionInputOf,
   CaptionOps,
   CreateInput,
   IngestOptions,
@@ -51,7 +52,7 @@ export type Videos<A extends VideoAdapter> =
           C["ingestFromUrl"],
           { ingestFromUrl(url: string, options?: IngestOptions): Promise<Asset> }
         > &
-        Gate<C["captions"], { readonly captions: CaptionOps }> &
+        Gate<C["captions"], { readonly captions: CaptionOps<CaptionInputOf<C>> }> &
         Gate<C["webhooks"], { readonly webhooks: WebhookOps }>
     : never;
 

@@ -67,18 +67,30 @@ When touching the SDK, match these:
    envelope (unwrap `.data`); Mux uses Basic auth + `{ data }`; Bunny uses `AccessKey` +
    raw JSON; Cloudflare uses Bearer + `{ result, success }`.
 
-7. **Unimplemented methods use `rejects(...)`** from `src/internal/pending.ts` (returns a
-   `() => Promise<never>` that rejects with a typed `VideoError`). `captions` and `webhooks`
-   are currently pending on all four adapters.
+7. **Webhook verification is shared, the envelope is not.** `src/internal/webhooks.ts` has the
+   WebCrypto HMAC-SHA256 + constant-time compare + timestamp tolerance (300s); each adapter
+   only supplies its header names, signed string, and event mapping. `verify()` throws
+   `unauthorized` on a bad signature or stale timestamp, so a resolved promise means the
+   request is authentic. An event the SDK doesn't model normalizes to `type: "unknown"`
+   rather than throwing.
 
-### Adapter status (as of v0.1.0)
+8. **`captionSource` narrows `captions.add`.** Mux only ingests captions from a public URL;
+   the other three take the file. So `Capabilities` carries `captionSource: "file" | "url"`
+   and `CaptionInputOf<C>` picks `CaptionFileInput` or `CaptionUrlInput` — passing a `body`
+   to Mux is a compile error, not a runtime one. `Caption.id` is whatever `remove()` takes:
+   the language code everywhere except Mux, which uses the track id.
+
+### Adapter status (as of v0.2.0)
 
 | Adapter | Implemented | Verified |
 | --- | --- | --- |
-| **rehelios** | full core + multipart upload + import + signed playback | ✅ unit tests vs the real contract (see below) |
-| **Mux** | core + direct upload + ingest + RS256 (WebCrypto) signed playback | ✅ live against a real account |
-| **Bunny** | core + PUT upload + fetch + SHA-256 token signed playback | ✅ live against a real account |
-| **Cloudflare** | core + direct upload + copy + `/token` signed playback | ✅ against the official docs |
+| **rehelios** | full core + multipart upload + import + signed playback + captions + webhooks | ✅ unit tests vs the real contract (see below) |
+| **Mux** | core + direct upload + ingest + RS256 (WebCrypto) signed playback + captions + webhooks | ✅ live against a real account; captions/webhooks unit-tested vs the docs |
+| **Bunny** | core + PUT upload + fetch + SHA-256 token signed playback + captions + webhooks | ✅ live against a real account; captions/webhooks unit-tested vs the docs |
+| **Cloudflare** | core + direct upload + copy + `/token` signed playback + captions + webhooks | ✅ against the official docs |
+
+Captions and webhooks are implemented on all four but have **not** been exercised live yet —
+they are covered by unit tests written against the official contracts.
 
 ### Provider gotchas
 

@@ -1,12 +1,21 @@
 import type { VideoAdapter } from "./adapter";
 import { VideoError } from "./errors";
 import { createHttpClient } from "./internal/http";
-import { rejects } from "./internal/pending";
+import {
+  assertFreshTimestamp,
+  assertSignature,
+  hmacSha256Hex,
+  parseJson,
+  parseSignatureHeader,
+  requireHeader,
+  requireWebhookSecret,
+} from "./internal/webhooks";
 import type {
   Asset,
   AssetStatus,
   Caption,
   CaptionOps,
+  CaptionUrlInput,
   IngestOptions,
   ListOptions,
   Playback,
@@ -17,6 +26,7 @@ import type {
   UploadTicket,
   VideoBody,
   WebhookEvent,
+  WebhookEventType,
   WebhookOps,
 } from "./types";
 
@@ -25,6 +35,7 @@ export interface MuxConfig {
   readonly tokenSecret: string;
   readonly signingKeyId?: string;
   readonly signingKeySecret?: string;
+  readonly webhookSecret?: string;
 }
 
 export type MuxCapabilities = {
@@ -33,6 +44,7 @@ export type MuxCapabilities = {
   readonly signedPlayback: true;
   readonly thumbnailAtTime: true;
   readonly captions: true;
+  readonly captionSource: "url";
   readonly webhooks: true;
 };
 
@@ -47,6 +59,14 @@ interface MuxPlaybackId {
   readonly policy: string;
 }
 
+interface MuxTrack {
+  readonly id: string;
+  readonly type?: string;
+  readonly text_type?: string;
+  readonly language_code?: string;
+  readonly name?: string;
+}
+
 interface MuxAsset {
   readonly id: string;
   readonly status?: string;
@@ -54,6 +74,7 @@ interface MuxAsset {
   readonly aspect_ratio?: string;
   readonly created_at?: string;
   readonly playback_ids?: readonly MuxPlaybackId[];
+  readonly tracks?: readonly MuxTrack[];
 }
 
 interface MuxUpload {
@@ -61,6 +82,18 @@ interface MuxUpload {
   readonly url: string;
   readonly asset_id?: string;
 }
+
+interface MuxWebhookBody {
+  readonly type?: string;
+  readonly data?: { readonly id?: string; readonly asset_id?: string };
+}
+
+const WEBHOOK_EVENTS: Record<string, WebhookEventType> = {
+  "video.asset.ready": "asset.ready",
+  "video.asset.errored": "asset.errored",
+  "video.asset.deleted": "asset.deleted",
+  "video.upload.asset_created": "upload.completed",
+};
 
 function toStatus(status: string | undefined): AssetStatus {
   switch (status) {
@@ -145,20 +178,63 @@ export function mux(config: MuxConfig): VideoAdapter<MuxCapabilities> {
   const getAsset = async (id: string): Promise<MuxAsset> =>
     (await http.get<MuxData<MuxAsset>>(`/assets/${id}`)).data;
 
-  const publicPlaybackId = async (id: string): Promise<string> => {
-    const asset = await getAsset(id);
+  const playbackIdOf = (asset: MuxAsset): string => {
     const ids = asset.playback_ids ?? [];
-    return ids.find((p) => p.policy === "public")?.id ?? ids[0]?.id ?? id;
+    return ids.find((p) => p.policy === "public")?.id ?? ids[0]?.id ?? asset.id;
   };
 
-  const captions: CaptionOps = {
-    list: rejects<readonly Caption[]>(PROVIDER, "captions.list"),
-    add: rejects<Caption>(PROVIDER, "captions.add"),
-    remove: rejects<void>(PROVIDER, "captions.remove"),
+  const publicPlaybackId = async (id: string): Promise<string> => playbackIdOf(await getAsset(id));
+
+  const toCaption = (track: MuxTrack, playbackId: string): Caption => ({
+    id: track.id,
+    language: track.language_code ?? "",
+    label: track.name ?? track.language_code ?? "",
+    url: `https://stream.mux.com/${playbackId}/text/${track.id}.vtt`,
+  });
+
+  const captions: CaptionOps<CaptionUrlInput> = {
+    list: async (assetId: string): Promise<readonly Caption[]> => {
+      const asset = await getAsset(assetId);
+      const playbackId = playbackIdOf(asset);
+      return (asset.tracks ?? [])
+        .filter((track) => track.type === "text")
+        .map((track) => toCaption(track, playbackId));
+    },
+
+    add: async (assetId: string, input: CaptionUrlInput): Promise<Caption> => {
+      const track = (
+        await http.post<MuxData<MuxTrack>>(`/assets/${assetId}/tracks`, {
+          url: input.url,
+          type: "text",
+          text_type: "subtitles",
+          language_code: input.language,
+          name: input.label,
+        })
+      ).data;
+      return toCaption(track, await publicPlaybackId(assetId));
+    },
+
+    remove: async (assetId: string, captionId: string): Promise<void> => {
+      await http.del(`/assets/${assetId}/tracks/${captionId}`);
+    },
   };
 
   const webhooks: WebhookOps = {
-    verify: rejects<WebhookEvent>(PROVIDER, "webhooks.verify"),
+    verify: async (request: Request): Promise<WebhookEvent> => {
+      const secret = requireWebhookSecret(PROVIDER, config.webhookSecret, "webhookSecret");
+      const parts = parseSignatureHeader(requireHeader(PROVIDER, request, "mux-signature"));
+      const timestamp = parts["t"] ?? "";
+      const signature = parts["v1"] ?? "";
+      assertFreshTimestamp(PROVIDER, Number(timestamp));
+      const raw = await request.text();
+      assertSignature(PROVIDER, await hmacSha256Hex(secret, `${timestamp}.${raw}`), signature);
+
+      const body = parseJson<MuxWebhookBody>(PROVIDER, raw);
+      const type = WEBHOOK_EVENTS[body.type ?? ""] ?? "unknown";
+      const assetId =
+        type === "upload.completed" ? (body.data?.asset_id ?? body.data?.id) : body.data?.id;
+      return { type, raw: body, ...(assetId !== undefined ? { assetId } : {}) };
+    },
   };
 
   const createUpload = async (): Promise<MuxUpload> =>
@@ -177,6 +253,7 @@ export function mux(config: MuxConfig): VideoAdapter<MuxCapabilities> {
       signedPlayback: true,
       thumbnailAtTime: true,
       captions: true,
+      captionSource: "url",
       webhooks: true,
     },
     raw: config,

@@ -1,11 +1,21 @@
 import type { VideoAdapter } from "./adapter";
 import { VideoError } from "./errors";
+import { toBlob } from "./internal/bytes";
 import { createHttpClient } from "./internal/http";
-import { rejects } from "./internal/pending";
+import {
+  assertFreshTimestamp,
+  assertSignature,
+  hmacSha256Hex,
+  parseJson,
+  parseSignatureHeader,
+  requireHeader,
+  requireWebhookSecret,
+} from "./internal/webhooks";
 import type {
   Asset,
   AssetStatus,
   Caption,
+  CaptionFileInput,
   CaptionOps,
   IngestOptions,
   ListOptions,
@@ -17,6 +27,7 @@ import type {
   UploadTicket,
   VideoBody,
   WebhookEvent,
+  WebhookEventType,
   WebhookOps,
 } from "./types";
 
@@ -25,6 +36,7 @@ export interface CloudflareConfig {
   readonly apiToken: string;
   readonly customerSubdomain: string;
   readonly maxDurationSeconds?: number;
+  readonly webhookSecret?: string;
 }
 
 const DEFAULT_MAX_DURATION = 21600;
@@ -35,6 +47,7 @@ export type CloudflareCapabilities = {
   readonly signedPlayback: true;
   readonly thumbnailAtTime: true;
   readonly captions: true;
+  readonly captionSource: "file";
   readonly webhooks: true;
 };
 
@@ -57,6 +70,22 @@ interface CloudflareVideo {
 interface DirectUpload {
   readonly uid: string;
   readonly uploadURL: string;
+}
+
+interface CloudflareCaption {
+  readonly language: string;
+  readonly label?: string;
+}
+
+function toWebhookEventType(state: string | undefined): WebhookEventType {
+  switch (state) {
+    case "ready":
+      return "asset.ready";
+    case "error":
+      return "asset.errored";
+    default:
+      return "unknown";
+  }
 }
 
 function toStatus(state: string | undefined): AssetStatus {
@@ -109,14 +138,50 @@ export function cloudflare(config: CloudflareConfig): VideoAdapter<CloudflareCap
     };
   }
 
-  const captions: CaptionOps = {
-    list: rejects<readonly Caption[]>(PROVIDER, "captions.list"),
-    add: rejects<Caption>(PROVIDER, "captions.add"),
-    remove: rejects<void>(PROVIDER, "captions.remove"),
+  const toCaption = (caption: CloudflareCaption): Caption => ({
+    id: caption.language,
+    language: caption.language,
+    label: caption.label ?? caption.language,
+  });
+
+  const captions: CaptionOps<CaptionFileInput> = {
+    list: async (assetId: string): Promise<readonly Caption[]> => {
+      const page = await http.get<Wrapped<readonly CloudflareCaption[]>>(`/${assetId}/captions`);
+      return page.result.map(toCaption);
+    },
+
+    add: async (assetId: string, input: CaptionFileInput): Promise<Caption> => {
+      const form = new FormData();
+      form.append("file", await toBlob(input.body, "text/vtt"), `${input.language}.vtt`);
+      const created = await http.putForm<Wrapped<CloudflareCaption | undefined>>(
+        `/${assetId}/captions/${input.language}`,
+        form,
+      );
+      return toCaption(created.result ?? { language: input.language, label: input.label });
+    },
+
+    remove: async (assetId: string, captionId: string): Promise<void> => {
+      await http.del(`/${assetId}/captions/${captionId}`);
+    },
   };
 
   const webhooks: WebhookOps = {
-    verify: rejects<WebhookEvent>(PROVIDER, "webhooks.verify"),
+    verify: async (request: Request): Promise<WebhookEvent> => {
+      const secret = requireWebhookSecret(PROVIDER, config.webhookSecret, "webhookSecret");
+      const parts = parseSignatureHeader(requireHeader(PROVIDER, request, "webhook-signature"));
+      const timestamp = parts["time"] ?? "";
+      const signature = parts["sig1"] ?? "";
+      assertFreshTimestamp(PROVIDER, Number(timestamp));
+      const raw = await request.text();
+      assertSignature(PROVIDER, await hmacSha256Hex(secret, `${timestamp}.${raw}`), signature);
+
+      const body = parseJson<CloudflareVideo>(PROVIDER, raw);
+      return {
+        type: toWebhookEventType(body.status?.state ?? undefined),
+        raw: body,
+        ...(body.uid !== undefined ? { assetId: body.uid } : {}),
+      };
+    },
   };
 
   return {
@@ -127,6 +192,7 @@ export function cloudflare(config: CloudflareConfig): VideoAdapter<CloudflareCap
       signedPlayback: true,
       thumbnailAtTime: true,
       captions: true,
+      captionSource: "file",
       webhooks: true,
     },
     raw: config,

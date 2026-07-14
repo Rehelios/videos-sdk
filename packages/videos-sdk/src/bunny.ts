@@ -1,11 +1,19 @@
 import type { VideoAdapter } from "./adapter";
 import { VideoError } from "./errors";
+import { toBase64, toBytes } from "./internal/bytes";
 import { createHttpClient } from "./internal/http";
-import { rejects } from "./internal/pending";
+import {
+  assertSignature,
+  hmacSha256Hex,
+  parseJson,
+  requireHeader,
+  requireWebhookSecret,
+} from "./internal/webhooks";
 import type {
   Asset,
   AssetStatus,
   Caption,
+  CaptionFileInput,
   CaptionOps,
   CreateInput,
   IngestOptions,
@@ -17,6 +25,7 @@ import type {
   UploadTicket,
   VideoBody,
   WebhookEvent,
+  WebhookEventType,
   WebhookOps,
 } from "./types";
 
@@ -25,6 +34,7 @@ export interface BunnyConfig {
   readonly apiKey: string;
   readonly pullZone: string;
   readonly tokenAuthKey?: string;
+  readonly webhookSecret?: string;
 }
 
 export type BunnyCapabilities = {
@@ -33,10 +43,16 @@ export type BunnyCapabilities = {
   readonly signedPlayback: true;
   readonly thumbnailAtTime: false;
   readonly captions: true;
+  readonly captionSource: "file";
   readonly webhooks: true;
 };
 
 const PROVIDER = "bunny";
+
+interface BunnyCaption {
+  readonly srclang: string;
+  readonly label?: string;
+}
 
 interface BunnyVideo {
   readonly guid: string;
@@ -46,10 +62,29 @@ interface BunnyVideo {
   readonly width?: number;
   readonly height?: number;
   readonly dateUploaded?: string;
+  readonly captions?: readonly BunnyCaption[];
 }
 
 interface BunnyList {
   readonly items: readonly BunnyVideo[];
+}
+
+interface BunnyWebhookBody {
+  readonly VideoGuid?: string;
+  readonly Status?: number;
+}
+
+function toWebhookEventType(status: number | undefined): WebhookEventType {
+  switch (status) {
+    case 3:
+      return "asset.ready";
+    case 5:
+      return "asset.errored";
+    case 7:
+      return "upload.completed";
+    default:
+      return "unknown";
+  }
 }
 
 function toStatus(status: number | undefined): AssetStatus {
@@ -107,14 +142,47 @@ export function bunny(config: BunnyConfig): VideoAdapter<BunnyCapabilities> {
     };
   }
 
-  const captions: CaptionOps = {
-    list: rejects<readonly Caption[]>(PROVIDER, "captions.list"),
-    add: rejects<Caption>(PROVIDER, "captions.add"),
-    remove: rejects<void>(PROVIDER, "captions.remove"),
+  const toCaption = (videoId: string, caption: BunnyCaption): Caption => ({
+    id: caption.srclang,
+    language: caption.srclang,
+    label: caption.label ?? caption.srclang,
+    url: `${cdn}/${videoId}/captions/${caption.srclang}.vtt`,
+  });
+
+  const captions: CaptionOps<CaptionFileInput> = {
+    list: async (assetId: string): Promise<readonly Caption[]> => {
+      const video = await http.get<BunnyVideo>(`/videos/${assetId}`);
+      return (video.captions ?? []).map((caption) => toCaption(assetId, caption));
+    },
+
+    add: async (assetId: string, input: CaptionFileInput): Promise<Caption> => {
+      await http.post(`/videos/${assetId}/captions/${input.language}`, {
+        srclang: input.language,
+        label: input.label,
+        captionsFile: toBase64(await toBytes(input.body)),
+      });
+      return toCaption(assetId, { srclang: input.language, label: input.label });
+    },
+
+    remove: async (assetId: string, captionId: string): Promise<void> => {
+      await http.del(`/videos/${assetId}/captions/${captionId}`);
+    },
   };
 
   const webhooks: WebhookOps = {
-    verify: rejects<WebhookEvent>(PROVIDER, "webhooks.verify"),
+    verify: async (request: Request): Promise<WebhookEvent> => {
+      const secret = requireWebhookSecret(PROVIDER, config.webhookSecret, "webhookSecret");
+      const signature = requireHeader(PROVIDER, request, "x-bunnystream-signature");
+      const raw = await request.text();
+      assertSignature(PROVIDER, await hmacSha256Hex(secret, raw), signature);
+
+      const body = parseJson<BunnyWebhookBody>(PROVIDER, raw);
+      return {
+        type: toWebhookEventType(body.Status),
+        raw: body,
+        ...(body.VideoGuid !== undefined ? { assetId: body.VideoGuid } : {}),
+      };
+    },
   };
 
   const createVideo = (title: string): Promise<BunnyVideo> =>
@@ -128,6 +196,7 @@ export function bunny(config: BunnyConfig): VideoAdapter<BunnyCapabilities> {
       signedPlayback: true,
       thumbnailAtTime: false,
       captions: true,
+      captionSource: "file",
       webhooks: true,
     },
     raw: config,
