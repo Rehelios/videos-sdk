@@ -162,7 +162,7 @@ export function rehelios(config: ReheliosConfig): VideoAdapter<ReheliosCapabilit
 
   const app = (config.appUrl ?? DEFAULT_APP_URL).replace(/\/$/, "");
   const http = createHttpClient({
-    baseUrl: config.apiBaseUrl ?? DEFAULT_API_BASE_URL,
+    baseUrl: (config.apiBaseUrl ?? DEFAULT_API_BASE_URL).replace(/\/+$/, "").replace(/\/v1$/, ""),
     provider: PROVIDER,
     headers: { "x-api-key": config.apiKey },
   });
