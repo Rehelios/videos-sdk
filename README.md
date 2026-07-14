@@ -103,10 +103,11 @@ major. Everything else releases nothing: other types (`chore:`, `docs:`, `ci:`),
 a missing or wrong scope — `fix:` and `fix(ci):` both resolve to no package and are
 silently dropped.
 
-Merging to `main` bumps the version, writes `CHANGELOG.md`, publishes to npm with
+Merging to `main` bumps the version, writes `CHANGELOG.md`, and opens a **"Version
+Packages" PR**. Merging *that* publishes to npm with
 [provenance](https://docs.npmjs.com/generating-provenance-statements) via OIDC trusted
-publishing, and creates the matching GitHub Release and tag — all in one run, with no
-intermediate PR.
+publishing, and creates the matching GitHub Release and tag. So a release is two merges:
+the change, then the version bump.
 
 ## License
 
