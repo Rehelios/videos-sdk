@@ -88,6 +88,7 @@ function InstallTabs() {
           <button
             key={item.id}
             type="button"
+            aria-pressed={item.id === active}
             onClick={() => setActive(item.id)}
             className={`rounded-full px-3 py-1 font-mono text-xs transition-colors ${item.id === active ? 'bg-fd-foreground text-fd-background' : 'text-fd-muted-foreground hover:text-fd-foreground'}`}
           >
@@ -95,7 +96,7 @@ function InstallTabs() {
           </button>
         ))}
       </div>
-      <CopyButton text={tab.command} />
+      <CopyButton key={tab.id} text={tab.command} />
       <p className="max-w-sm text-balance text-center text-fd-muted-foreground text-xs">{tab.hint}</p>
     </div>
   );

@@ -5,12 +5,16 @@ We squash-merge, so THIS PR's title becomes the commit on `main` — and that is
 decides whether a release ships:
 
   fix(videos-sdk): ...      -> patch release
+  perf(videos-sdk): ...     -> patch release
+  revert(videos-sdk): ...   -> patch release
   feat(videos-sdk): ...     -> minor release
-  feat(videos-sdk)!: ...    -> major release
+  feat(videos-sdk)!: ...    -> major release  (the `!` works on any of the above,
+  fix(videos-sdk)!: ...     -> major release   as does a `BREAKING CHANGE:` footer)
   chore: / docs: / ci: ...  -> no release
 
-Scope it `videos-sdk` only when the published package changes. An unscoped `fix: ...`
-publishes nothing.
+Only `feat`, `fix`, `perf` and `revert` release anything, and only when scoped to
+`videos-sdk`. An unscoped `fix: ...` — or a wrong scope like `fix(ci): ...` — resolves
+to no workspace package and silently publishes nothing.
 -->
 
 ## What & why

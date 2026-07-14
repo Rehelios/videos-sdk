@@ -62,11 +62,11 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
     },
     async postForm<T>(path: string, form: FormData): Promise<T> {
       const response = await request(path, { method: "POST", body: form });
-      return (await jsonOrEmpty(response)) as T;
+      return (await jsonOrEmpty(response, provider)) as T;
     },
     async putForm<T>(path: string, form: FormData): Promise<T> {
       const response = await request(path, { method: "PUT", body: form });
-      return (await jsonOrEmpty(response)) as T;
+      return (await jsonOrEmpty(response, provider)) as T;
     },
     async del(path: string): Promise<void> {
       await request(path, { method: "DELETE" });
@@ -74,13 +74,17 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
   };
 }
 
-async function jsonOrEmpty(response: Response): Promise<unknown> {
+async function jsonOrEmpty(response: Response, provider: string): Promise<unknown> {
   const text = await response.text();
-  if (text === "") return {};
+  if (text.trim() === "") return {};
   try {
     return JSON.parse(text);
-  } catch {
-    return {};
+  } catch (cause) {
+    throw new VideoError("provider_error", `${provider} returned a malformed JSON body.`, {
+      provider,
+      status: response.status,
+      cause,
+    });
   }
 }
 

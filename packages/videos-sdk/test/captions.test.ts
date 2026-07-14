@@ -110,6 +110,18 @@ describe("cloudflare captions", () => {
     expect(caption).toEqual({ id: "en", language: "en", label: "English" });
   });
 
+  test("add surfaces a malformed provider body as provider_error", async () => {
+    globalThis.fetch = (() =>
+      Promise.resolve(new Response("<html>502</html>", { status: 200 }))) as typeof fetch;
+    const videos = createVideos({
+      adapter: cloudflare({ accountId: "acc", apiToken: "t", customerSubdomain: "c.example.com" }),
+    });
+
+    await expect(
+      videos.captions.add("uid", { language: "en", label: "English", body: "WEBVTT" }),
+    ).rejects.toThrow(/malformed JSON/);
+  });
+
   test("list unwraps the result envelope", async () => {
     record(() => json({ success: true, result: [{ language: "fr" }] }));
     const videos = createVideos({

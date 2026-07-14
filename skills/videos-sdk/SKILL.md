@@ -47,26 +47,39 @@ Three rules that explain almost every question:
 
 ## The API
 
-Every adapter has this core, returning a normalized `Asset`:
+Every adapter has this core, returning a normalized `Asset`. These are the
+signatures — optional properties are marked `?`, so fill in real values:
 
 ```ts
-await videos.create({ title?, passthrough? });          // Asset (no bytes yet)
-await videos.upload("intro.mp4", file, { contentType?, signal?, onProgress? });
-await videos.signedUploadUrl({ key?, maxSizeBytes?, expiresInSeconds? }); // UploadTicket for browser uploads
-await videos.get(id);                                    // Asset
-await videos.list({ limit?, cursor? });                  // readonly Asset[]
-await videos.delete(id);
-await videos.playback(id);                               // { hls, poster, dash? }
-videos.thumbnail(id);                                    // string (sync, not a promise)
+create(input?: { title?: string; passthrough?: string }): Promise<Asset>
+upload(key: string, body: VideoBody, options?: {
+  contentType?: string; signal?: AbortSignal;
+  onProgress?: (p: { bytesUploaded: number; bytesTotal: number }) => void;
+}): Promise<Asset>
+signedUploadUrl(options?: {
+  key?: string; maxSizeBytes?: number; expiresInSeconds?: number;
+}): Promise<UploadTicket>                                  // for browser uploads
+get(id: string): Promise<Asset>
+list(options?: { limit?: number; cursor?: string }): Promise<readonly Asset[]>
+delete(id: string): Promise<void>
+playback(id: string): Promise<{ hls: string; poster: string; dash?: string }>
+thumbnail(id: string): string                              // sync, not a promise
 ```
 
 Capability-gated — present only when the adapter declares them:
 
 ```ts
-await videos.signedPlayback(id, { expiresInSeconds: 3600 });  // string
-await videos.ingestFromUrl(url, { title?, passthrough? });    // Asset
-videos.captions;  // CaptionOps
-videos.webhooks;  // WebhookOps
+signedPlayback(id: string, options: { expiresInSeconds: number }): Promise<string>
+ingestFromUrl(url: string, options?: { title?: string; passthrough?: string }): Promise<Asset>
+captions: CaptionOps
+webhooks: WebhookOps
+```
+
+In practice:
+
+```ts
+const asset = await videos.upload("intro.mp4", file, { contentType: "video/mp4" });
+const url = await videos.signedPlayback(asset.id, { expiresInSeconds: 3600 });
 ```
 
 `upload(key, body)` takes a `VideoBody`: `Blob | ReadableStream<Uint8Array> |
@@ -86,7 +99,19 @@ type AssetStatus = "waiting_upload" | "uploading" | "processing" | "ready" | "er
 `Asset` is `{ id, status, raw }` plus optional `duration`, `width`, `height`,
 `createdAt`, `passthrough`. Transcoding is async: after `upload()` an asset is
 usually `processing`, and playback only works once it's `ready`. Either verify a
-webhook (below) or poll `get(id)` until `status === "ready"`.
+webhook (below) or poll. **`ready` and `errored` are both terminal — a poll loop
+that only waits for `ready` never returns on a failed encode:**
+
+```ts
+async function waitForReady(id: string): Promise<Asset> {
+  for (;;) {
+    const asset = await videos.get(id);
+    if (asset.status === "ready") return asset;
+    if (asset.status === "errored") throw new Error(`Encoding failed for ${id}`);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+}
+```
 
 ## Capability matrix
 
@@ -161,20 +186,27 @@ handed to you rather than thrown away. Not every provider emits every type:
 Cloudflare only notifies on ready/errored, so `upload.completed` and
 `asset.deleted` never arrive from it.
 
+**`verify` proves authenticity, not uniqueness.** It has no idea whether it has
+seen a delivery before, and providers retry — so a valid request can legitimately
+arrive twice. Make the side effect idempotent (or dedupe on the provider's
+delivery id from `event.raw`); never do "verify → charge/publish/email" blindly.
+
 ## Adapter config and gotchas
+
+Every field without `?` is required:
 
 ```ts
 import { rehelios } from "videos-sdk/rehelios";
-rehelios({ apiKey, apiBaseUrl?, appUrl?, collectionId?, visibility?, webhookSecret? });
+rehelios({ apiKey: string, apiBaseUrl?, appUrl?, collectionId?, visibility?: "public" | "private", webhookSecret? });
 
 import { mux } from "videos-sdk/mux";
-mux({ tokenId, tokenSecret, signingKeyId?, signingKeySecret?, webhookSecret? });
+mux({ tokenId: string, tokenSecret: string, signingKeyId?, signingKeySecret?, webhookSecret? });
 
 import { bunny } from "videos-sdk/bunny";
-bunny({ libraryId, apiKey, pullZone, tokenAuthKey?, webhookSecret? });
+bunny({ libraryId: string, apiKey: string, pullZone: string, tokenAuthKey?, webhookSecret? });
 
 import { cloudflare } from "videos-sdk/cloudflare";
-cloudflare({ accountId, apiToken, customerSubdomain, maxDurationSeconds?, webhookSecret? });
+cloudflare({ accountId: string, apiToken: string, customerSubdomain: string, maxDurationSeconds?, webhookSecret? });
 ```
 
 - **Rehelios** — `thumbnailAtTime` is false: `thumbnail()` returns a best-effort
@@ -223,15 +255,18 @@ on the server, `PUT`/`POST` from the client:
 const ticket = await videos.signedUploadUrl({ maxSizeBytes: 2_000_000_000 });
 // -> { url, id, method }  send `url` + `id` to the browser
 await fetch(ticket.url, { method: ticket.method, body: file });
-// then poll videos.get(ticket.id) until status === "ready"
+await waitForReady(ticket.id);  // the loop above: stops on ready OR errored
 ```
 
-**React to "the video is ready" instead of polling** — one route, any provider:
+**React to "the video is ready" instead of polling** — one route, any provider.
+The handler must be idempotent, because a verified delivery can still be a retry:
 
 ```ts
 export async function POST(request: Request) {
   const event = await videos.webhooks.verify(request);  // throws if not authentic
-  if (event.type === "asset.ready" && event.assetId) await publish(event.assetId);
+  if (event.type === "asset.ready" && event.assetId !== undefined) {
+    await markPublishedOnce(event.assetId);  // idempotent: safe to run twice
+  }
   return new Response(null, { status: 204 });
 }
 ```
@@ -248,8 +283,14 @@ natively; everywhere else use hls.js:
 ```ts
 const { hls, poster } = await videos.playback(id);
 video.poster = poster;
-if (video.canPlayType("application/vnd.apple.mpegurl")) video.src = hls;
-else new Hls().loadSource(hls), hls.attachMedia(video);
+
+if (video.canPlayType("application/vnd.apple.mpegurl")) {
+  video.src = hls;
+} else {
+  const player = new Hls();
+  player.loadSource(hls);      // `hls` is the manifest URL, not the player
+  player.attachMedia(video);
+}
 ```
 
 ## Conventions
