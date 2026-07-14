@@ -32,7 +32,7 @@ class VideoError extends Error {
 | `not_found`             | The asset doesn't exist (HTTP 404).                         |
 | `unsupported_operation` | The provider can't do this — also a **compile error**.      |
 | `upload_failed`         | The bytes didn't make it to the provider.                   |
-| `rate_limited`          | Too many requests (HTTP 429). Back off and retry.           |
+| `rate_limited`          | Too many requests (HTTP 429), **after** the built-in retries. |
 | `provider_error`        | The provider returned something unexpected (usually 5xx).   |
 | `network`               | The request never completed (DNS, timeout, offline).        |
 | `invalid_request`       | Bad arguments before any request went out.                  |
@@ -60,10 +60,19 @@ try {
 }
 ```
 
-### Retrying rate limits
+### Rate limits are already retried
 
-`rate_limited` and transient `network` / `provider_error` failures are the ones worth
-retrying. Everything else is a bug in your call, not a blip:
+**You don't need a retry loop for 429.** The HTTP client retries it up to 5 times on its
+own, honouring the provider's `Retry-After` header and falling back to exponential backoff
+with jitter when there isn't one. By the time a `rate_limited` error reaches you, those
+retries are spent — wrapping the call in another loop just adds a second, slower backoff on
+top of the first.
+
+429 is the only status retried automatically, and that's deliberate: a rate-limited request
+was *rejected*, never processed, so replaying it is safe. A `network` failure mid-`POST` has
+no such guarantee — the provider may well have created the asset before the connection
+dropped — so retrying it is a decision only you can make, with knowledge of whether the call
+is idempotent:
 
 ```ts
 async function withRetry<T>(fn: () => Promise<T>, tries = 3): Promise<T> {
@@ -71,9 +80,7 @@ async function withRetry<T>(fn: () => Promise<T>, tries = 3): Promise<T> {
     try {
       return await fn();
     } catch (error) {
-      const retryable =
-        error instanceof VideoError &&
-        (error.code === 'rate_limited' || error.code === 'network');
+      const retryable = error instanceof VideoError && error.code === 'network';
       if (!retryable || attempt >= tries) throw error;
       await new Promise((r) => setTimeout(r, 2 ** attempt * 250));
     }
