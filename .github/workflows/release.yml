@@ -1,30 +1,28 @@
 name: Release
 
-# Two merges, one release — and that is forced on us, not a preference.
+# One push to main, one release. No intermediate "Version Packages" PR.
 #
-#   1. A merge to `main` lands a releasable commit (`feat(videos-sdk): ...`).
-#   2. This workflow drafts the changelog from the conventional commits since the last
-#      tag, bumps the version, and opens a **"Version Packages" PR** with package.json,
-#      CHANGELOG.md and bun.lock.
-#   3. Merging that PR puts the bump on `main`, which runs this workflow again. Now the
-#      version in the repo is ahead of the one on npm, so Tegami publishes (OIDC trusted
-#      publishing, with provenance) and creates the tag + GitHub Release.
+#   1. Tegami reads the conventional commits since the last tag and drafts changelog
+#      entries from them. Only `feat` (minor), `fix`/`perf`/`revert` (patch) and breaking
+#      changes count, and only when scoped to a workspace package: `fix(videos-sdk): ...`.
+#      A `chore:`, `docs:` or `ci:` commit drafts nothing.
+#   2. If nothing was drafted, the job stops. No commit, no tag, no publish.
+#   3. Otherwise Tegami bumps the version and writes CHANGELOG.md; we commit that to main
+#      and push it; then Tegami publishes to npm (OIDC trusted publishing, with provenance)
+#      and creates the git tag + GitHub Release.
 #
-# Why not commit the bump straight to `main` (one merge, which is what we had)? Because
-# `main` is a protected branch: pushes are restricted to a named user AND a `check`
-# status is required, and a commit the runner creates has neither. The bot can only push
-# to an unprotected branch — hence the PR. The one-merge flow needs a pusher that can
-# bypass protection, which means one of: a GitHub App installed on the org (add it to a
-# repo ruleset's bypass list), a fine-grained PAT with Contents:write, or GitHub Team
-# (org rulesets, where `GitHub Actions` itself can be a bypass actor — the free plan
-# cannot). Given any of those, drop `versionPr`, commit the bump, and call `publish`.
+# Why this can push to `main` when the runner's own GITHUB_TOKEN cannot: `main` restricts
+# pushes to a named user and requires the `check` status, so a commit the runner authored
+# fails `git push origin HEAD:main` with GH006. RELEASE_TOKEN is a fine-grained PAT owned by
+# that allowlisted user (an admin, and enforce_admins is off), so the push authenticates as
+# them and clears branch protection. Nothing else in the repo needs the PAT.
 #
 # The publish lock is gitignored, so it never outlives the runner and a half-finished run
 # can't wedge the next one.
 #
-# Tegami pushes the version branch with GITHUB_TOKEN, and GitHub does not trigger
-# workflows on GITHUB_TOKEN pushes — so this cannot loop. It also means the Version
-# Packages PR gets no `check` run of its own; merge it as an admin.
+# Unlike GITHUB_TOKEN, a PAT push DOES trigger workflows, so the `chore(release):` commit
+# would start this workflow again. The job-level `if` skips that run (and a chore commit
+# drafts nothing anyway, so it's a belt-and-braces guard, not the only thing stopping a loop).
 
 on:
   push:
@@ -36,21 +34,23 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write # push the version branch, the tag, and the GitHub Release
-  pull-requests: write # open/update the Version Packages PR
+  contents: write # push the release commit, the tag, and the GitHub Release
   id-token: write # npm OIDC trusted publishing
 
 jobs:
   release:
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
     runs-on: ubuntu-latest
     env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
       GITHUB_REPOSITORY: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # Tegami needs full history + tags to find the commit range
-          persist-credentials: false # Tegami re-authenticates origin before pushing
+          # Persist RELEASE_TOKEN so `git push origin HEAD:main` and the tag push below
+          # authenticate as the allowlisted user and clear branch protection.
+          token: ${{ secrets.RELEASE_TOKEN }}
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -72,8 +72,41 @@ jobs:
       - run: bun run typecheck
       - run: bun run --filter videos-sdk test
 
-      # `ci` = version + publish. On a run where releasable commits are pending it opens
-      # (or updates) the Version Packages PR and stops. On the run after that PR merges,
-      # the repo version is ahead of npm, so it publishes, tags, and cuts the Release.
-      - name: Version or publish
-        run: bun scripts/tegami.ts ci
+      # In CI, `tegami` with no command generates changelog entries from the conventional
+      # commits since the last tag (it skips the TUI). GitHub Actions sets CI, so this is
+      # the non-interactive draft — the step the single `tegami ci` command never runs,
+      # which is why every release since it landed was a silent no-op.
+      - name: Draft changelog entries from conventional commits
+        run: bun scripts/tegami.ts
+
+      - name: Apply the version bump
+        run: bun scripts/tegami.ts version
+
+      # Exits 0 when the publish lock has pending packages, 1 when there is nothing to do.
+      - name: Check whether anything needs publishing
+        id: check
+        run: |
+          if bun scripts/tegami.ts check-publish; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "No releasable commits since the last tag — nothing to publish." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Commit before publishing so Tegami's tag lands on the release commit.
+      - name: Commit and push the version bump
+        if: steps.check.outputs.publish == 'true'
+        run: |
+          version=$(node -p "require('./packages/videos-sdk/package.json').version")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # `version` rewrites package.json, CHANGELOG.md *and* the workspace version in
+          # bun.lock — miss the lockfile and the next `--frozen-lockfile` install fails.
+          # Everything else it writes lives under the gitignored .tegami/changes/.
+          git add -A
+          git commit -m "chore(release): videos-sdk@${version}"
+          git push origin HEAD:main
+
+      - name: Publish to npm, tag, and create the GitHub Release
+        if: steps.check.outputs.publish == 'true'
+        run: bun scripts/tegami.ts publish
