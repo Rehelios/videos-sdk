@@ -14,8 +14,8 @@
     "format": "biome format --write packages scripts"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.3",
-    "tegami": "^1.2.4",
+    "@biomejs/biome": "^2.5.5",
+    "tegami": "^1.2.6",
     "typescript": "^6.0.3"
   }
 }
